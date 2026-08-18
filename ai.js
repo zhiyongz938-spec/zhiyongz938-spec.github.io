@@ -8,7 +8,7 @@ async function aiAsk(system, user) {
       model: "deepseek-v4-flash",
       messages: [...(system ? [{ role: "system", content: system }] : []), { role: "user", content: user }],
       temperature: 0.75,
-      max_tokens: 500,
+      max_tokens: 350,
       thinking: { type: "disabled" },
     }),
     signal: AbortSignal.timeout(85000),
