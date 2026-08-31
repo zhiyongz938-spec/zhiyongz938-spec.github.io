@@ -826,7 +826,85 @@ async function aiLiuyaoOnline(){
     box.innerHTML="<div class=\"ai-result\"><div class=\"ai-head\">⚠ 在线解读不可用</div><div class=\"ai-body\">网络连接不稳定，内置解读已足够参考。</div></div>";
   }
 }
+
+/* ============ 继续询问（多轮记忆对话） ============ */
+var _chatCtx = null;
+
+function continueAsk(type, system, context){
+  _chatCtx = { type: type, system: system, context: context, history: [] };
+  var box = type === 'yao' ? document.getElementById('yaoAiBox')
+          : type === 'tarot' ? document.getElementById('tarotAiBox')
+          : document.getElementById('baziAiBox');
+  if(!box) return;
+  // 移除旧的追问区
+  var old = document.getElementById('chatArea');
+  if(old) old.remove();
+  var div = document.createElement('div');
+  div.id = 'chatArea';
+  div.style.cssText = 'margin-top:14px;border-top:1px dashed #e5d9bd;padding-top:12px';
+  div.innerHTML = [
+    '<div style="font-size:14px;font-weight:700;color:#3d3226;margin-bottom:8px">💬 继续询问（我会记住前面的对话）</div>',
+    '<div id="chatHistory" style="max-height:220px;overflow-y:auto;margin-bottom:8px"></div>',
+    '<div style="display:flex;gap:8px">',
+    '  <input id="followupInput" style="flex:1;padding:10px;border:1.5px solid #e5d9bd;border-radius:10px;font-size:14px;background:#f7f2e6;color:#3d3226;outline:none" placeholder="输入你的追问，如：那什么时候会有转机？" />',
+    '  <button onclick="sendFollowup()" style="padding:10px 20px;border:none;border-radius:10px;background:#3d3226;color:#f7f2e6;font-size:14px;font-weight:700;cursor:pointer">发送</button>',
+    '</div>',
+  ].join('');
+  box.appendChild(div);
+  var inp = document.getElementById('followupInput');
+  if(inp) inp.focus();
+}
+
+async function sendFollowup(){
+  if(!_chatCtx) return;
+  var input = document.getElementById('followupInput');
+  var q = input ? input.value.trim() : '';
+  if(!q) return;
+  input.value = '';
+  var hist = document.getElementById('chatHistory');
+  if(!hist) return;
+  // 显示用户问题
+  var uDiv = document.createElement('div');
+  uDiv.style.cssText = 'background:#f0e3bb;border-radius:10px;padding:8px 12px;font-size:14px;margin:4px 0;color:#3d3226';
+  uDiv.textContent = '你：' + q;
+  hist.appendChild(uDiv);
+  hist.scrollTop = hist.scrollHeight;
+  // 加载提示
+  var lDiv = document.createElement('div');
+  lDiv.style.cssText = 'background:#f7f2e6;border-radius:10px;padding:8px 12px;font-size:14px;margin:4px 0;color:#a2937a';
+  lDiv.innerHTML = '☯ 正在思考…';
+  hist.appendChild(lDiv);
+  hist.scrollTop = hist.scrollHeight;
+  // 构建 messages：system + 背景 + 历史 + 新问题
+  _chatCtx.history.push({ role: 'user', content: q });
+  var messages = [
+    { role: 'system', content: _chatCtx.system },
+    { role: 'user', content: _chatCtx.context },
+  ];
+  _chatCtx.history.forEach(function(m){ messages.push(m); });
+  try{
+    var answer = await Promise.race([
+      aiAskMessages(messages),
+      new Promise(function(_, rej){ setTimeout(function(){ rej(new Error('timeout')); }, 20000); })
+    ]);
+    lDiv.remove();
+    var aDiv = document.createElement('div');
+    aDiv.style.cssText = 'background:#fffdf7;border:1px solid #e5d9bd;border-left:3px solid #c9a227;border-radius:10px;padding:10px 14px;font-size:14px;margin:4px 0;color:#6b5d4a;line-height:1.9';
+    aDiv.innerHTML = mdRender(answer);
+    hist.appendChild(aDiv);
+    hist.scrollTop = hist.scrollHeight;
+    _chatCtx.history.push({ role: 'assistant', content: answer });
+  }catch(e){
+    lDiv.remove();
+    var eDiv = document.createElement('div');
+    eDiv.style.cssText = 'color:#b03a2e;font-size:13px;margin:4px 0';
+    eDiv.textContent = '网络连接不稳定，请稍后重试。';
+    hist.appendChild(eDiv);
+  }
+}
+
 /* ============ 摇卦（装卦 + 深度解读） ============ */
+
 let currentQType = '感情';
 let lastYaoResult = null;
 function selectQType(btn, q) {
@@ -1001,7 +1079,7 @@ async function aiLiuyao(){
   try{
     var onTxt = await Promise.race([aiAsk(sys2,usr2), new Promise(function(_,rej){setTimeout(function(){rej(new Error("timeout"));},8000);})]);
     if(onTxt){
-      box.innerHTML = "<div class=\"ai-result\"><div class=\"ai-head\">☯ 按【"+qt+"】方向解读<span style=\"font-size:11px;margin-left:8px;color:#a2937a\">⚡ 在线深度解读</span></div><div class=\"ai-body\">"+mdRender(onTxt)+"</div></div>";
+      box.innerHTML = "<div class=\"ai-result\"><div class=\"ai-head\">☯ 按【"+qt+"】方向解读<span style=\"font-size:11px;margin-left:8px;color:#a2937a\">⚡ 在线深度解读</span></div><div class=\"ai-body\">"+mdRender(onTxt)+"</div></div><div class=\"panel-actions\"><button class=\"btn-gold\" onclick=\"continueAsk('yao','"+sys2.replace(/'/g,"\\'")+"','"+usr2.replace(/'/g,"\\'")+"')\">💬 继续询问</button></div>";
     }
   }catch(e){
     // 在线失败 → 内置兜底
@@ -1306,7 +1384,7 @@ async function aiTarot(){
   try{
     var onTxt = await Promise.race([aiAsk(system,user), new Promise(function(_,rej){setTimeout(function(){rej(new Error('timeout'));},8000);})]);
     if(onTxt){
-      box.innerHTML = "<div class=\"ai-result\"><div class=\"ai-head\">🔮 按【"+qt+"】方向解读<span style=\"font-size:11px;margin-left:8px;color:#a2937a\">⚡ 在线深度解读</span></div><div class=\"ai-body\">"+mdRender(onTxt)+"</div></div>";
+      box.innerHTML = "<div class=\"ai-result\"><div class=\"ai-head\">🔮 按【"+qt+"】方向解读<span style=\"font-size:11px;margin-left:8px;color:#a2937a\">⚡ 在线深度解读</span></div><div class=\"ai-body\">"+mdRender(onTxt)+"</div></div><div class=\"panel-actions\"><button class=\"btn-gold\" onclick=\"continueAsk('tarot','"+system.replace(/'/g,"\\'")+"','"+user.replace(/'/g,"\\'")+"')\">💬 继续询问</button></div>";
     }
   }catch(e){
     try{

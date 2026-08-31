@@ -1,28 +1,19 @@
-// GitHub Pages 版：浏览器直连 DeepSeek API
-const DS_KEY = "sk-5b471cd9a84d4671b3eb4534097c50ce";
-async function aiAsk(system, user) {
-  const r = await fetch("https://api.deepseek.com/chat/completions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + DS_KEY },
-    body: JSON.stringify({
-      model: "deepseek-v4-flash",
-      messages: [...(system ? [{ role: "system", content: system }] : []), { role: "user", content: user }],
-      temperature: 0.75,
-      max_tokens: 350,
-      thinking: { type: "disabled" },
-    }),
-    signal: (function(){try{var c=new AbortController();setTimeout(function(){c.abort();},8000);return c.signal;}catch(e){return undefined;}})(),
-  });
-  const j = await r.json();
-  if (!r.ok || j.error) throw new Error(j.error?.message || ("HTTP " + r.status));
-  return j.choices?.[0]?.message?.content || "";
-}
-
 /* ============================================
  * AI 解析封装 ai.js
  * 调用本机 /api/ai（服务器端转发智谱 GLM，key 不外泄）
  * ============================================ */
 
+async function aiAsk(system, user) {
+  const r = await fetch('/api/ai', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ system, user }),
+    signal: AbortSignal.timeout(85000),
+  });
+  const j = await r.json();
+  if (!j.ok) throw new Error(j.error || 'AI 解析失败');
+  return j.text;
+}
 
 /* 流式 AI：边生成边返回（SSE） */
 async function aiAskStream(system, user, onDelta) {
@@ -113,4 +104,23 @@ function questionTypeSelect(selected) {
     opts += `<button class="qtype ${q === selected ? 'on' : ''}" data-q="${q}" onclick="selectQType(this,'${q}')">${q}</button>`;
   });
   return `<div class="qtype-wrap"><span class="qtype-lbl">所问之事：</span><div class="qtype-btns">${opts}</div></div>`;
+}
+
+/* 多轮对话：发送完整 messages 数组（带记忆） */
+async function aiAskMessages(messages) {
+  const r = await fetch("https://api.deepseek.com/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + DS_KEY },
+    body: JSON.stringify({
+      model: "deepseek-v4-flash",
+      messages: messages,
+      temperature: 0.75,
+      max_tokens: 500,
+      thinking: { type: "disabled" },
+    }),
+    signal: (function(){try{var c=new AbortController();setTimeout(function(){c.abort();},20000);return c.signal;}catch(e){return undefined;}})(),
+  });
+  const j = await r.json();
+  if (!r.ok || j.error) throw new Error(j.error?.message || ("HTTP " + r.status));
+  return j.choices?.[0]?.message?.content || "";
 }
