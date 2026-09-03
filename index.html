@@ -678,11 +678,11 @@ footer{padding:44px 0 56px;background:#f2ead8;border-top:1px solid var(--line)}
   <button class="share-close" onclick="document.getElementById('shareModal').classList.remove('open')">收 起</button>
 </div>
 
-<script src="bazi.js?v=20260904"></script>
-<script src="liuyao.js?v=20260904"></script>
-<script src="tarot.js?v=20260904"></script>
-<script src="ai.js?v=20260904"></script>
-<script src="offline.js?v=20260904"></script>
+<script src="bazi.js?v=20260905"></script>
+<script src="liuyao.js?v=20260905"></script>
+<script src="tarot.js?v=20260905"></script>
+<script src="ai.js?v=20260905"></script>
+<script src="offline.js?v=20260905"></script>
 <script src="local.js"></script>
 <script>
 /* ============ 标语 ============ */
@@ -1287,21 +1287,20 @@ function doPaiPan(){
     table+='</tr><tr><td>藏干</td>';
     r.pillars.forEach(p=>{table+=`<td class="note">${zc(p.zhi).join(' ')}</td>`;});
     table+='</tr></table>';
-    // 大运（含起止年龄段 + 当前所行大运高亮 + 起运年份推算）
+    // 大运（专业排盘口径：虚岁 + 交运公历年，每柱10年）
     const nowYear=new Date().getFullYear();
-    const startAge=r.dayun.qiYunYears;
-    // 起运公历年 ≈ 出生年 + 起运虚岁年龄（约）
     const birthYear=parseInt(String(y))||nowYear;
-    const qyYear=birthYear+startAge+1; // 起运约在出生年后 startAge+1 年交运
+    const qyX=r.dayun.jiaoYunXuSui;      // 交运虚岁（首柱起）
+    const qyYr=r.dayun.jiaoYunYear;      // 交运公历年
     let dyHtml='';
     r.dayun.list.forEach((gz,i)=>{
-      const age=startAge+i*10;
-      const ageEnd=age+10;
-      const isNow=nowYear>=birthYear+age&&nowYear<birthYear+ageEnd;
-      dyHtml+=`<div class="dayun-item ${isNow?'now':''}" title="${gz} · ${age}~${ageEnd}岁">
+      const xuSui=qyX+i*10;              // 本柱起始虚岁
+      const yrStart=qyYr+i*10;           // 本柱起始公历年
+      const isNow=nowYear>=yrStart&&nowYear<yrStart+10;
+      dyHtml+=`<div class="dayun-item ${isNow?'now':''}" title="${gz} · ${xuSui}~${xuSui+10}虚岁 · ${yrStart}~${yrStart+10}年">
         <div class="gz">${gz}</div>
-        <div class="age-range">${age}~${ageEnd}岁</div>
-        <div class="year-range">${birthYear+age}~${birthYear+ageEnd-1}</div>
+        <div class="age-range">${xuSui}~${xuSui+10}虚岁</div>
+        <div class="year-range">${yrStart}~${yrStart+10}年</div>
       </div>`;
     });
     body.innerHTML=`
@@ -1316,7 +1315,7 @@ function doPaiPan(){
         </div>
         ${table}
         <div style="margin-top:10px">
-          <div style="font-size:13px;color:var(--ink-soft);margin-bottom:4px">大运（${r.dayun.shun?'顺排':'逆排'} · ${startAge}岁${r.dayun.qiYunMonths}个月起运）：</div>
+          <div style="font-size:13px;color:var(--ink-soft);margin-bottom:4px">大运（${r.dayun.shun?'顺排':'逆排'} · 出生后${r.dayun.qiYunYears}岁${r.dayun.qiYunMonths}个月起运，约${qyYr}年交运，${qyX}虚岁）：</div>
           <div class="dayun-row">${dyHtml}</div>
         </div>
         <div style="margin-top:6px;font-size:11.5px;color:#a2937a;line-height:1.7">盲派交运歌：八字大运何年起，生月干支做太极；阳男阴女顺着排，阴男阳女排法逆。本命年柱纳音【${r.pillars[0].nayin}】→ ${jiaoYunText(r.pillars[0].nayin)}（换运时间各不同，生年纳音来确定）。</div>
@@ -1350,17 +1349,17 @@ async function aiBazi(){
   const pillarsInfo=r.pillars.map(p=>
     p.name+' '+p.gz+'（纳音'+p.nayin+'，天干'+p.ssGan+'，地支'+p.ssZhi+'，藏干'+zc(p.zhi).join('')+'）'
   ).join('、');
-  const dayunInfo=r.dayun.list.map((g,i)=>r.dayun.qiYunYears+i*10+'岁起'+g).join('，');
+  const dayunInfo=r.dayun.list.map((g,i)=>(r.dayun.jiaoYunXuSui+i*10)+'虚岁起（'+(r.dayun.jiaoYunYear+i*10)+'年）'+g).join('，');
   const system='你是顶尖八字命理师（盲派为主：干支象法、宫位取象、做功制化；子平为辅：格局、旺衰、十神），像DeepSeek一样智能且详细。必须严格紧扣求测人提出的具体问题来解读：ta描述了什么情况（如纠结跳槽、身体不适、感情困扰），就围绕那个具体情况重点展开，先直接回应ta的具体问题，再全面展开命局分析。\n输出要求：请用几个简短小标题自然分段（小标题用**加粗**，如 **一、命局气象**），每段之间空一行，让读者在手机上一目了然；整体仍是流畅的朋友式白话，不用编号罗列、不堆术语。\n内容要求极其详细：1）**命局总论**——日主强弱、五行配置、整体气象，先结合ta的具体问题说一句最有用的判断；2）**四柱细读**——年柱（出身与早年）、月柱（性格与格局）、日柱（自身与婚姻感情）、时柱（归宿与晚运），每柱都要落到ta的问题上，专业词立刻用白话解释；3）**大运走势**——从当前所走大运讲起，逐段说明每步大运对ta问题的具体影响与大致年龄段，让ta知道眼下到未来十年在经历什么；4）**流年细断**——当前流年干支与十神对日主的作用、对ta问题的具体吉凶影响、今年内的时间节点；5）**心理剖析**——ta当下的心态、纠结、恐惧与潜在倾向，点破ta没说出口的心思；6）**三条建议**——具体可执行，最好结合ta的年龄与处境。\n全文约1500字左右，内容越详细越好。全程大白话、多打生活比方。不吓人，断语留余地。';
   const birthYear = parseInt(r.solar.slice(0, 4)) || 0;
   const nowY = new Date().getFullYear();
-  const ageNow = nowY - birthYear;
-  let curDayun = '', curAgeStart = -1;
+  const ageNow = nowY - birthYear + 1; // 虚岁
+  let curDayun = '', curAgeStart = -1, curYrStart = -1;
   r.dayun.list.forEach((g, i) => {
-    const s = r.dayun.qiYunYears + i * 10;
-    if (ageNow >= s && ageNow < s + 10) { curDayun = g; curAgeStart = s; }
+    const yr = r.dayun.jiaoYunYear + i * 10;
+    if (nowY >= yr && nowY < yr + 10) { curDayun = g; curAgeStart = r.dayun.jiaoYunXuSui + i * 10; curYrStart = yr; }
   });
-  const user='求测人信息：'+r.gender+'命，出生于'+r.solar+'（'+r.lunar+'），'+r.hourZhiName+'时生'+(r.solarNote?'（'+r.solarNote+'）':'')+'。日主：'+r.dayMaster+r.dayMasterWuxing+'。\n四柱：'+pillarsInfo+'。\n大运：'+(r.dayun.shun?'顺排':'逆排')+'，'+r.dayun.qiYunYears+'岁'+r.dayun.qiYunMonths+'个月起运：'+dayunInfo+'。\n求测人今年约'+ageNow+'岁，当前正走【'+curDayun+'】大运（'+curAgeStart+'~'+(curAgeStart+9)+'岁）'+(curDayun?'，请重点分析这步大运':'')+'。\n当前流年：'+r.liuNian.gz+'年（'+r.liuNian.year+'），天干对日主为'+r.liuNian.ssGan+'，地支为'+r.liuNian.ssZhi+'。\n所问之事：'+qtype+'。\n求测人自述：'+(desc||'未说明')+'。\n请详细解读，尤其紧扣所问之事与自述情况。';
+  const user='求测人信息：'+r.gender+'命，出生于'+r.solar+'（'+r.lunar+'），'+r.hourZhiName+'时生'+(r.solarNote?'（'+r.solarNote+'）':'')+'。日主：'+r.dayMaster+r.dayMasterWuxing+'。\n四柱：'+pillarsInfo+'。\n大运：'+(r.dayun.shun?'顺排':'逆排')+'，出生后'+r.dayun.qiYunYears+'岁'+r.dayun.qiYunMonths+'个月起运，'+r.dayun.jiaoYunYear+'年交运（'+r.dayun.jiaoYunXuSui+'虚岁）：'+dayunInfo+'。\n求测人今年虚岁约'+ageNow+'，当前正走【'+curDayun+'】大运（'+curAgeStart+'~'+(curAgeStart+10)+'虚岁，'+curYrStart+'~'+(curYrStart+10)+'年）'+(curDayun?'，请重点分析这步大运':'')+'。\n当前流年：'+r.liuNian.gz+'年（'+r.liuNian.year+'），天干对日主为'+r.liuNian.ssGan+'，地支为'+r.liuNian.ssZhi+'。\n所问之事：'+qtype+'。\n求测人自述：'+(desc||'未说明')+'。\n请详细解读，尤其紧扣所问之事与自述情况。';
   try{
     var onTxt = await Promise.race([
       aiAsk(system, user, 2200),

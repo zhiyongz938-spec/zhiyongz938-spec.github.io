@@ -220,7 +220,15 @@ function dayun(y, m, d, hour, gender, yearGzIdx, monthGan, monthZhi) {
     z = ((z + step) % 12 + 12) % 12;
     list.push(GAN[g] + ZHI[z]);
   }
-  return { shun, qiYunYears, qiYunMonths, list, diffDays: Math.round(diffDays * 10) / 10 };
+  // 交运虚岁与公历年（与主流专业排盘一致）
+  // 实岁起运 = diffDays/3 年（如 5.58 年 ≈ 5年7个月）
+  // 交运落在出生后的第 ceil(实岁) 个年头 → 交运公历年 ≈ 出生年 + ceil(diffDays/3)
+  //   例：2007-07-22 生，5.58 年后 ≈ 2013-02 → 交运年 2013 = 2007 + 6
+  // 虚岁 = 交运公历年 - 出生年 + 1（2007 生 → 2013 年虚岁 7）
+  const qyFloat = diffDays / 3;
+  const jiaoYunYear = y + Math.ceil(qyFloat - 1e-9);
+  const jiaoYunXuSui = jiaoYunYear - y + 1;
+  return { shun, qiYunYears, qiYunMonths, list, diffDays: Math.round(diffDays * 10) / 10, jiaoYunXuSui, jiaoYunYear };
 }
 
 /* 十神工具 */
