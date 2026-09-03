@@ -301,10 +301,16 @@ footer{padding:44px 0 56px;background:#f2ead8;border-top:1px solid var(--line)}
 .panpai-info{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 4px}
 .panpai-chip{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:5px 14px;font-size:12.5px;color:var(--ink-soft)}
 .panpai-chip b{color:var(--accent)}
-.dayun-row{display:flex;gap:6px;overflow-x:auto;padding:4px 0 8px}
-.dayun-item{flex:0 0 auto;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 12px;text-align:center;font-size:12px;color:var(--ink-soft)}
-.dayun-item .gz{font-size:15px;font-weight:700;color:var(--ink)}
-.dayun-item.now{border-color:var(--gold);background:var(--gold-soft)}
+.dayun-row{display:flex;gap:6px;overflow-x:auto;padding:4px 0 8px;scroll-behavior:smooth;-webkit-overflow-scrolling:touch}
+.dayun-row::-webkit-scrollbar{height:4px}
+.dayun-row::-webkit-scrollbar-thumb{background:#d8c9a3;border-radius:4px}
+.dayun-item{flex:0 0 auto;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px 14px;text-align:center;font-size:12px;color:var(--ink-soft);transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease;min-width:74px}
+.dayun-item:hover{transform:translateY(-2px);box-shadow:var(--shadow)}
+.dayun-item .gz{font-size:16px;font-weight:700;color:var(--ink);letter-spacing:1px}
+.dayun-item .age-range{font-size:11px;color:#8a7a5c;margin-top:2px}
+.dayun-item .year-range{font-size:10px;color:#b3a68a;margin-top:1px}
+.dayun-item.now{border-color:var(--gold);background:var(--gold-soft);box-shadow:0 0 0 1px var(--gold)}
+.dayun-item.now::after{content:"当前";display:block;font-size:10px;color:var(--gold);font-weight:700;margin-top:2px;letter-spacing:1px}
 
 /* 卦象显示 */
 .gua-board{margin:8px 0 14px;background:var(--paper);border-radius:14px;padding:14px 12px;border:1px solid var(--line)}
@@ -323,9 +329,11 @@ footer{padding:44px 0 56px;background:#f2ead8;border-top:1px solid var(--line)}
 .gua-line .tag.empty{background:transparent}
 
 /* AI 结果 */
-.ai-result{margin-top:12px}
+@keyframes aiFadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.ai-result{margin-top:12px;animation:aiFadeUp .45s ease}
 .ai-result .ai-head{display:flex;align-items:center;gap:8px;color:var(--gold);font-weight:700;font-size:14.5px;letter-spacing:1px;margin-bottom:8px}
 .ai-result .ai-body{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--gold);border-radius:12px;padding:16px 18px;font-size:14.5px;color:var(--ink-soft);line-height:1.95}
+.ai-result .ai-body p{margin:8px 0}
 .ai-retry{text-align:center;margin-top:10px}
 
 /* 塔罗 */
@@ -673,7 +681,7 @@ footer{padding:44px 0 56px;background:#f2ead8;border-top:1px solid var(--line)}
 <script src="bazi.js"></script>
 <script src="liuyao.js"></script>
 <script src="tarot.js"></script>
-<script src="ai.js?v=20260902"></script>
+<script src="ai.js?v=20260903"></script>
 <script src="offline.js"></script>
 <script src="local.js"></script>
 <script>
@@ -1071,13 +1079,33 @@ async function aiLiuyao(){
   // 点击后显示加载过程（转圈+提示），请求在线 AI，失败自动内置兜底
   var qt = window.currentQType || currentQType || "其他";
   showLoading(box, "正在深度解析…");
-  var sys2="你是六爻解卦师傅（京房纳甲+增删卜易），像DeepSeek一样智能分析。必须严格紧扣求测人提出的具体问题来解读：ta说什么就围绕什么分析（如ta说最近腰疼，就围绕腰疼谈健康），先直接回答ta的具体问题，再结合卦象补充。说话像朋友聊天：白话、口语、无AI腔、不用编号分点。全文200~300字。不贩卖焦虑。";
-  var usr2="问："+qt+"。自述："+(window._yaoDesc||"未说明")+"。本卦："+lastYaoResult.gua.guaName+"（世"+lastYaoResult.gua.shi+"应"+lastYaoResult.gua.ying+"）"+(lastYaoResult.gua.bianGuaName?"，变卦："+lastYaoResult.gua.bianGuaName:"")+"。请综合论卦。";
+  // 六爻：注入全部卦象细节（卦宫/世应/日辰/逐爻六神六亲动变/变卦），AI 才能看得细
+  var dayStr = "";
+  try {
+    if (lastYaoResult.dayGanIdx !== undefined && lastYaoResult.dayZhiIdx !== undefined && typeof GAN !== 'undefined' && typeof ZHI !== 'undefined') {
+      dayStr = "，日" + GAN[lastYaoResult.dayGanIdx] + ZHI[lastYaoResult.dayZhiIdx];
+    }
+  } catch (e) {}
+  var guaInfo = lastYaoResult.gua.guaName + "（" + (lastYaoResult.gua.gongName || "") + "，世" + lastYaoResult.gua.shi + "爻 应" + lastYaoResult.gua.ying + "爻" + dayStr + "）"
+    + (lastYaoResult.gua.bianGuaName ? "，变卦：" + lastYaoResult.gua.bianGuaName : "");
+  var lineDetail = (lastYaoResult.gua.lines || []).map(function(l){
+    return l.idx + "爻[" + l.liuShen + "] " + l.zhi + l.qin + (l.shi ? "(世)" : "") + (l.ying ? "(应)" : "") + (l.bian ? "⚡动" : "");
+  }).join("；");
+  var sys2 = "你是精通六爻断卦的民间师傅（京房纳甲+《增删卜易》体系），擅长把卦讲得让外行一听就懂。必须严格紧扣求测人的具体问题和自述来解：ta遇到什么、纠结什么，就围绕那个具体情境展开，先直接回答ta的问题，再结合卦象逐层细讲。\n"
+    + "要求（输出请自然成段，不要用'第一、第二'编号）：\n"
+    + "1. 开头一句白话点破本卦整体格局（卦名+世应+动变给你什么总印象），像师傅开口定调；\n"
+    + "2. 紧扣所问直接给结论（ta最想听的答案，明说吉凶趋势但留余地）；\n"
+    + "3. 细解卦象：逐一讲清动爻（第几爻动、六神、变爻化出什么、对求测人的含义）、世应关系（世爻代表ta自己，应爻代表对方/事情）、月日旺衰对用神的影响——每个专业词出现立刻用大白话解释；\n"
+    + "4. 心理剖析：结合ta自述的状态（纠结、焦虑、期待），说出ta当下的心态与潜在倾向，要有共情；\n"
+    + "5. 收尾给两三条具体、可落地的建议，再留一句温暖有盼头的话。\n"
+    + "全程口语化、生活化、像朋友聊天，无AI腔。全文600~800字。不贩卖焦虑，断语留余地。";
+  var usr2 = "问：" + qt + "。求测人自述：" + (window._yaoDesc || "未说明") + "。\n本卦：" + guaInfo + "\n逐爻详情：" + (lineDetail || "无") + "。\n请综合整个卦象，紧扣所问细致解读。";
   window._chatCtxData = { system: sys2, context: usr2 };
   try{
     var onTxt = await Promise.race([aiAsk(sys2,usr2), new Promise(function(_,rej){setTimeout(function(){rej(new Error("timeout"));},30000);})]);
     if(onTxt){
-      box.innerHTML = "<div class=\"ai-result\"><div class=\"ai-head\">☯ 按【"+qt+"】方向解读<span style=\"font-size:11px;margin-left:8px;color:#a2937a\">⚡ 在线深度解读</span></div><div class=\"ai-body\">"+mdRender(onTxt)+"</div></div><div class=\"panel-actions\"><button class=\"btn-gold\" onclick=\"continueAsk('yao','"+sys2.replace(/'/g,"\\'")+"','"+usr2.replace(/'/g,"\\'")+"')\">💬 继续询问</button></div>";
+      box.innerHTML = "<div class=\"ai-result\"><div class=\"ai-head\">☯ 按【"+qt+"】方向解读<span style=\"font-size:11px;margin-left:8px;color:#a2937a\">⚡ 在线深度解读</span></div><div class=\"ai-body\">"+mdRender(onTxt)+"</div></div><div class=\"panel-actions\"><button class=\"btn-gold\" onclick=\"continueAsk('yao')\">💬 继续询问</button></div>";
+      smoothReveal(box);
     }
   }catch(e){
     // 在线失败 → 内置兜底
@@ -1250,14 +1278,22 @@ function doPaiPan(){
     table+='</tr><tr><td>藏干</td>';
     r.pillars.forEach(p=>{table+=`<td class="note">${zc(p.zhi).join(' ')}</td>`;});
     table+='</tr></table>';
-    // 大运
+    // 大运（含起止年龄段 + 当前所行大运高亮 + 起运年份推算）
     const nowYear=new Date().getFullYear();
     const startAge=r.dayun.qiYunYears;
+    // 起运公历年 ≈ 出生年 + 起运虚岁年龄（约）
+    const birthYear=parseInt(String(y))||nowYear;
+    const qyYear=birthYear+startAge+1; // 起运约在出生年后 startAge+1 年交运
     let dyHtml='';
     r.dayun.list.forEach((gz,i)=>{
       const age=startAge+i*10;
-      const isNow=nowYear>=y+age-1&&nowYear<y+age+9;
-      dyHtml+=`<div class="dayun-item ${isNow?'now':''}"><div class="gz">${gz}</div>${age}岁起</div>`;
+      const ageEnd=age+10;
+      const isNow=nowYear>=birthYear+age&&nowYear<birthYear+ageEnd;
+      dyHtml+=`<div class="dayun-item ${isNow?'now':''}" title="${gz} · ${age}~${ageEnd}岁">
+        <div class="gz">${gz}</div>
+        <div class="age-range">${age}~${ageEnd}岁</div>
+        <div class="year-range">${birthYear+age}~${birthYear+ageEnd-1}</div>
+      </div>`;
     });
     body.innerHTML=`
       <div class="panpai">
@@ -1306,8 +1342,16 @@ async function aiBazi(){
     p.name+' '+p.gz+'（纳音'+p.nayin+'，天干'+p.ssGan+'，地支'+p.ssZhi+'，藏干'+zc(p.zhi).join('')+'）'
   ).join('、');
   const dayunInfo=r.dayun.list.map((g,i)=>r.dayun.qiYunYears+i*10+'岁起'+g).join('，');
-  const system='你是顶尖八字命理师（盲派为主：干支象法、宫位取象、做功制化；子平为辅：格局、旺衰、十神），像DeepSeek一样智能且详细。必须严格紧扣求测人提出的具体问题来解读：ta描述了什么情况（如纠结跳槽、身体不适、感情困扰），就围绕那个具体情况重点展开，先直接回应ta的具体问题，再全面展开命局分析。要求极其详细：1）命局总论（日主强弱、五行配置、整体气象）；2）四柱逐一解读（年柱出身与早年、月柱格局与性格、日柱自身与婚姻、时柱归宿与晚运）；3）大运逐段分析（每步大运对ta问题的具体影响，尤其当前所走大运）；4）当前流年详细解读（流年干支、十神对日主的作用、对ta具体问题的吉凶影响）；5）心理层面深入剖析（ta当下的心态、纠结、恐惧与潜在倾向）；6）三条具体可执行建议。说话像朋友聊天：全程大白话、多结合生活场景打比方，专业词出现马上用白话解释，不用编号分点。全文约1500字左右，内容越详细越好。不吓人，断语留余地。';
-  const user='求测人信息：'+r.gender+'命，出生于'+r.solar+'（'+r.lunar+'），'+r.hourZhiName+'时生'+(r.solarNote?'（'+r.solarNote+'）':'')+'。日主：'+r.dayMaster+r.dayMasterWuxing+'。\n四柱：'+pillarsInfo+'。\n大运：'+(r.dayun.shun?'顺排':'逆排')+'，'+r.dayun.qiYunYears+'岁'+r.dayun.qiYunMonths+'个月起运：'+dayunInfo+'。\n当前流年：'+r.liuNian.gz+'年（'+r.liuNian.year+'），天干对日主为'+r.liuNian.ssGan+'，地支为'+r.liuNian.ssZhi+'。\n所问之事：'+qtype+'。\n求测人自述：'+(desc||'未说明')+'。\n请详细解读，尤其紧扣所问之事与自述情况。';
+  const system='你是顶尖八字命理师（盲派为主：干支象法、宫位取象、做功制化；子平为辅：格局、旺衰、十神），像DeepSeek一样智能且详细。必须严格紧扣求测人提出的具体问题来解读：ta描述了什么情况（如纠结跳槽、身体不适、感情困扰），就围绕那个具体情况重点展开，先直接回应ta的具体问题，再全面展开命局分析。\n输出要求：请用几个简短小标题自然分段（小标题用**加粗**，如 **一、命局气象**），每段之间空一行，让读者在手机上一目了然；整体仍是流畅的朋友式白话，不用编号罗列、不堆术语。\n内容要求极其详细：1）**命局总论**——日主强弱、五行配置、整体气象，先结合ta的具体问题说一句最有用的判断；2）**四柱细读**——年柱（出身与早年）、月柱（性格与格局）、日柱（自身与婚姻感情）、时柱（归宿与晚运），每柱都要落到ta的问题上，专业词立刻用白话解释；3）**大运走势**——从当前所走大运讲起，逐段说明每步大运对ta问题的具体影响与大致年龄段，让ta知道眼下到未来十年在经历什么；4）**流年细断**——当前流年干支与十神对日主的作用、对ta问题的具体吉凶影响、今年内的时间节点；5）**心理剖析**——ta当下的心态、纠结、恐惧与潜在倾向，点破ta没说出口的心思；6）**三条建议**——具体可执行，最好结合ta的年龄与处境。\n全文约1500字左右，内容越详细越好。全程大白话、多打生活比方。不吓人，断语留余地。';
+  const birthYear = parseInt(r.solar.slice(0, 4)) || 0;
+  const nowY = new Date().getFullYear();
+  const ageNow = nowY - birthYear;
+  let curDayun = '', curAgeStart = -1;
+  r.dayun.list.forEach((g, i) => {
+    const s = r.dayun.qiYunYears + i * 10;
+    if (ageNow >= s && ageNow < s + 10) { curDayun = g; curAgeStart = s; }
+  });
+  const user='求测人信息：'+r.gender+'命，出生于'+r.solar+'（'+r.lunar+'），'+r.hourZhiName+'时生'+(r.solarNote?'（'+r.solarNote+'）':'')+'。日主：'+r.dayMaster+r.dayMasterWuxing+'。\n四柱：'+pillarsInfo+'。\n大运：'+(r.dayun.shun?'顺排':'逆排')+'，'+r.dayun.qiYunYears+'岁'+r.dayun.qiYunMonths+'个月起运：'+dayunInfo+'。\n求测人今年约'+ageNow+'岁，当前正走【'+curDayun+'】大运（'+curAgeStart+'~'+(curAgeStart+9)+'岁）'+(curDayun?'，请重点分析这步大运':'')+'。\n当前流年：'+r.liuNian.gz+'年（'+r.liuNian.year+'），天干对日主为'+r.liuNian.ssGan+'，地支为'+r.liuNian.ssZhi+'。\n所问之事：'+qtype+'。\n求测人自述：'+(desc||'未说明')+'。\n请详细解读，尤其紧扣所问之事与自述情况。';
   try{
     var onTxt = await Promise.race([
       aiAsk(system, user, 2200),
@@ -1315,6 +1359,7 @@ async function aiBazi(){
     ]);
     if(onTxt){
       box.innerHTML = '<div class="ai-result"><div class="ai-head">📜 按【'+qtype+'】方向解读<span style="font-size:11px;margin-left:8px;color:#a2937a">⚡ 在线深度解读</span></div><div class="ai-body">'+mdRender(onTxt)+'</div></div><div class="panel-actions"><button class="btn-gold" onclick="continueAsk(\'bazi\')">💬 继续询问</button></div>';
+      smoothReveal(box);
     }
   }catch(e){
     try{
@@ -1432,13 +1477,19 @@ async function aiTarot(){
   const qt = window.currentQType || currentQType || '其他';
   const desc = window._tarotDesc || '';
   const cardsInfo = lastTarotCards.map((c,i)=>['过去','现在','未来'][i]+'：'+c.name+'（'+(c.upright?'正位':'逆位')+'）').join('，');
-  const system='你是塔罗解读师，懂心理，像DeepSeek一样智能分析。必须严格紧扣求测人提出的具体问题来解读：ta描述了什么情况，就围绕那个具体情况展开（结合三张牌的牌面意象与正逆位），先直接回应ta的具体问题，再给心理与建议。说话像朋友聊天：白话、口语、无AI腔、不用编号分点。全文200~300字。不制造焦虑。';
-  const user='问：'+qt+'。自述：'+(desc||'未说明')+'。抽到的牌：'+cardsInfo+'。请综合整个牌阵解读。';
+  const system='你是深谙心理学的塔罗解读师，像DeepSeek一样细腻。必须严格紧扣求测人提出的具体问题与自述来解：ta正经历什么、卡在哪里、真正想知道什么。回答分三个层次自然展开（不要用编号）：\n'
+    + '1. 先正面回应ta的问题：结合整个牌阵给一个总的判断与趋势（过去如何走到今天、现在卡在哪、未来往哪走），白话直说、有温度；\n'
+    + '2. 逐张细读三张牌：每张牌先讲牌面给你的感觉与核心意象，再讲正/逆位在这一位置的含义，最后落到ta的具体问题上（过去那张牌呼应ta的什么经历，现在那张牌照见ta当下的什么状态，未来那张牌提示什么可能）——专业牌意必须用生活话解释，让人有"被看见"的感觉；\n'
+    + '3. 心理层面共情剖析：ta没说出口的担忧、内在冲突与潜在力量；\n'
+    + '4. 结尾给两三条具体可操作的小建议，再留一句温柔有盼头的话。\n'
+    + '全程口语化、像朋友聊天，无AI腔。全文500~700字。不制造焦虑，不给绝对化断言。';
+  const user='问：'+qt+'。求测人自述：'+(desc||'未说明')+'。\n抽到的牌阵（过去-现在-未来）：'+cardsInfo+'。\n请综合整个牌阵，紧扣所问细致解读。';
   window._chatCtxData = { system: system, context: user };
   try{
     var onTxt = await Promise.race([aiAsk(system,user), new Promise(function(_,rej){setTimeout(function(){rej(new Error('timeout'));},30000);})]);
     if(onTxt){
       box.innerHTML = '<div class="ai-result"><div class="ai-head">🔮 按【'+qt+'】方向解读<span style="font-size:11px;margin-left:8px;color:#a2937a">⚡ 在线深度解读</span></div><div class="ai-body">'+mdRender(onTxt)+'</div></div><div class="panel-actions"><button class="btn-gold" onclick="continueAsk(\'tarot\')">💬 继续询问</button></div>';
+      smoothReveal(box);
     }
   }catch(e){
     try{
@@ -1700,6 +1751,16 @@ function openTool(id){
   fn();
 }
 function closeTool(){ document.getElementById('toolPanel').classList.remove('open'); }
+
+/* 平滑滚到某个结果区（解读完成后自动展示，操作更顺） */
+function smoothReveal(el){
+  if(!el) return;
+  try{
+    el.scrollIntoView({behavior:'smooth', block:'nearest'});
+  }catch(e){
+    try{ el.scrollIntoView(); }catch(e2){}
+  }
+}
 
 // 初始化功德显示
 document.addEventListener('DOMContentLoaded',()=>{

@@ -103,6 +103,13 @@ function mdRender(text) {
   for (const raw of lines) {
     const line = raw.trim();
     if (!line) { if (inList) { html += "</div>"; inList = false; } continue; }
+    // 小标题：整行仅一个加粗（如 **一、命局气象** 或 **当前大运**）→ 醒目分区标题
+    const boldOnly = line.match(/^<b>([^<]+)<\/b>$/);
+    if (boldOnly) {
+      if (inList) { html += "</div>"; inList = false; }
+      html += `<div style="margin:14px 0 6px;padding-left:10px;border-left:3px solid var(--gold);font-size:15px;font-weight:800;color:var(--ink);letter-spacing:1px">${boldOnly[1]}</div>`;
+      continue;
+    }
     if (/^\d+[.、]/.test(line)) {
       if (!inList) { html += '<div style="margin:8px 0">'; inList = true; }
       html += `<div style="padding:3px 0 3px 22px;position:relative"><span style="position:absolute;left:0;color:var(--gold);font-weight:700">${line.match(/^\d+[.、]/)[0]}</span>${line.replace(/^\d+[.、]/, "")}</div>`;
@@ -111,6 +118,7 @@ function mdRender(text) {
       html += `<div style="padding:3px 0 3px 18px;position:relative"><span style="position:absolute;left:2px;color:var(--gold)">·</span>${line.replace(/^[-•·]\s*/, "")}</div>`;
     } else {
       if (inList) { html += "</div>"; inList = false; }
+      // 行内若含加粗片段，独立行但非纯标题：正常段落
       html += `<p style="margin:7px 0;line-height:1.95">${line}</p>`;
     }
   }
