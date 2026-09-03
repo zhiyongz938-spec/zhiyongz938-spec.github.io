@@ -13,8 +13,8 @@ function mkSignal(timeoutMs) {
   } catch (e) { return undefined; }
 }
 
-/* 基础对话：system + user，maxTokens 为输出上限 */
-async function aiAsk(system, user, maxTokens) {
+/* 基础对话：system + user，maxTokens 为输出上限（失败自动重试 2 次，抗网络抖动） */
+async function aiAskOnce(system, user, maxTokens, timeoutMs) {
   const r = await fetch("https://api.deepseek.com/chat/completions", {
     method: "POST",
     headers: { "Content-Type": "application/json", "Authorization": "Bearer " + DS_KEY },
@@ -25,12 +25,25 @@ async function aiAsk(system, user, maxTokens) {
       max_tokens: maxTokens || 800,
       thinking: { type: "disabled" },
     }),
-    signal: mkSignal(70000),
+    signal: mkSignal(timeoutMs || 70000),
   });
   let j;
   try { j = await r.json(); } catch (e) { throw new Error("服务响应异常（HTTP " + r.status + "）"); }
   if (!r.ok || j.error) throw new Error(j.error?.message || ("HTTP " + r.status));
   return j.choices?.[0]?.message?.content || "";
+}
+async function aiAsk(system, user, maxTokens) {
+  var lastErr = null;
+  for (var attempt = 0; attempt < 3; attempt++) {
+    try {
+      return await aiAskOnce(system, user, maxTokens, 70000);
+    } catch (e) {
+      lastErr = e;
+      // 429 限流/5xx/超时 → 稍候重试；网络失败立即重试
+      await new Promise(function (res) { setTimeout(res, 900 * (attempt + 1)); });
+    }
+  }
+  throw lastErr || new Error("AI 请求失败");
 }
 
 /* 流式 AI：边生成边返回（SSE） */
