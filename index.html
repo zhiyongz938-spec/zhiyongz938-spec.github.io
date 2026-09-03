@@ -882,7 +882,7 @@ async function sendFollowup(){
   try{
     var answer = await Promise.race([
       aiAskMessages(messages),
-      new Promise(function(_, rej){ setTimeout(function(){ rej(new Error('timeout')); }, 25000); })
+      new Promise(function(_, rej){ setTimeout(function(){ rej(new Error('timeout')); }, 60000); })
     ]);
     if(lDiv.parentNode) lDiv.remove();
     var aDiv = document.createElement('div');
@@ -1075,7 +1075,7 @@ async function aiLiuyao(){
   var usr2="问："+qt+"。自述："+(window._yaoDesc||"未说明")+"。本卦："+lastYaoResult.gua.guaName+"（世"+lastYaoResult.gua.shi+"应"+lastYaoResult.gua.ying+"）"+(lastYaoResult.gua.bianGuaName?"，变卦："+lastYaoResult.gua.bianGuaName:"")+"。请综合论卦。";
   window._chatCtxData = { system: sys2, context: usr2 };
   try{
-    var onTxt = await Promise.race([aiAsk(sys2,usr2), new Promise(function(_,rej){setTimeout(function(){rej(new Error("timeout"));},8000);})]);
+    var onTxt = await Promise.race([aiAsk(sys2,usr2), new Promise(function(_,rej){setTimeout(function(){rej(new Error("timeout"));},30000);})]);
     if(onTxt){
       box.innerHTML = "<div class=\"ai-result\"><div class=\"ai-head\">☯ 按【"+qt+"】方向解读<span style=\"font-size:11px;margin-left:8px;color:#a2937a\">⚡ 在线深度解读</span></div><div class=\"ai-body\">"+mdRender(onTxt)+"</div></div><div class=\"panel-actions\"><button class=\"btn-gold\" onclick=\"continueAsk('yao','"+sys2.replace(/'/g,"\\'")+"','"+usr2.replace(/'/g,"\\'")+"')\">💬 继续询问</button></div>";
     }
@@ -1247,7 +1247,7 @@ async function aiBazi(){
   try{
     var onTxt = await Promise.race([
       aiAsk(system, user, 2200),
-      new Promise(function(_, rej){ setTimeout(function(){ rej(new Error('timeout')); }, 25000); })
+      new Promise(function(_, rej){ setTimeout(function(){ rej(new Error('timeout')); }, 90000); })
     ]);
     if(onTxt){
       box.innerHTML = '<div class="ai-result"><div class="ai-head">📜 按【'+qtype+'】方向解读<span style="font-size:11px;margin-left:8px;color:#a2937a">⚡ 在线深度解读</span></div><div class="ai-body">'+mdRender(onTxt)+'</div></div><div class="panel-actions"><button class="btn-gold" onclick="continueAsk(\'bazi\')">💬 继续询问</button></div>';
@@ -1372,7 +1372,7 @@ async function aiTarot(){
   const user='问：'+qt+'。自述：'+(desc||'未说明')+'。抽到的牌：'+cardsInfo+'。请综合整个牌阵解读。';
   window._chatCtxData = { system: system, context: user };
   try{
-    var onTxt = await Promise.race([aiAsk(system,user), new Promise(function(_,rej){setTimeout(function(){rej(new Error('timeout'));},8000);})]);
+    var onTxt = await Promise.race([aiAsk(system,user), new Promise(function(_,rej){setTimeout(function(){rej(new Error('timeout'));},30000);})]);
     if(onTxt){
       box.innerHTML = '<div class="ai-result"><div class="ai-head">🔮 按【'+qt+'】方向解读<span style="font-size:11px;margin-left:8px;color:#a2937a">⚡ 在线深度解读</span></div><div class="ai-body">'+mdRender(onTxt)+'</div></div><div class="panel-actions"><button class="btn-gold" onclick="continueAsk(\'tarot\')">💬 继续询问</button></div>';
     }
