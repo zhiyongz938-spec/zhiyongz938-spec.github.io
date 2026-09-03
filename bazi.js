@@ -134,6 +134,44 @@ function hourPillar(dayGan, hour) {
   return { gan, zhi };
 }
 
+/* ============ 真太阳时校正（盲派历法） ============
+ * 输入北京时间（钟表时）→ 按出生地经度 + 均时差校正为真太阳时
+ * 公式：地方平太阳时 = 北京时 + (经度-120°)*4分钟；真太阳时 = 地方平太阳时 + 均时差
+ */
+function equationOfTime(y, m, d) {
+  const start = Date.UTC(y, 0, 1);
+  const N = Math.round((Date.UTC(y, m - 1, d) - start) / 86400000) + 1;
+  const B = (2 * Math.PI * (N - 81)) / 364;
+  return 9.87 * Math.sin(2 * B) - 7.53 * Math.cos(B) - 1.5 * Math.sin(B); // 分钟
+}
+/* 校正出生钟表时间 → 真太阳时(小时,浮点)。返回 {solar, shiftDays}
+ * solar>=23 → 日柱进一日（子初换日）；<0 → 前一日 */
+function trueSolarHour(y, m, d, hour, minute, lngE) {
+  const lng = (typeof lngE === 'number' && isFinite(lngE)) ? lngE : 120;
+  const min = (typeof minute === 'number' && isFinite(minute)) ? minute : 30;
+  const localMean = hour + min / 60 + (lng - 120) * 4 / 60; // 地方平太阳时
+  let solar = localMean + equationOfTime(y, m, d) / 60;     // + 均时差 = 真太阳时
+  let shiftDays = 0;
+  if (solar >= 24) { solar -= 24; shiftDays = 1; }
+  else if (solar < 0) { solar += 24; shiftDays = -1; }
+  if (solar >= 23) shiftDays = 1; // 晚子时 23 点后日柱按次日
+  return { solar, shiftDays };
+}
+
+/* 盲派交运时刻（换运时间各不同，生年纳音来确定） */
+const JIAOYUN_BY_WUXING = {
+  '金': '金命交运处暑日，处暑当日申时整',
+  '木': '木命交运在大寒，大寒当日寅时中',
+  '水': '水命交运冬至前，之前三天亥时定',
+  '火': '火命交运清明前，之前三天午时中',
+  '土': '土命交运芒种后，之后九天辰时定',
+};
+function jiaoYunText(nayinName) {
+  if (!nayinName) return '';
+  const wx = nayinName.slice(-1); // 纳音末字即五行（屋上土→土）
+  return JIAOYUN_BY_WUXING[wx] || '';
+}
+
 /* 大运：阳年男/阴年女顺排，从月柱起；起运=出生到最近节天数÷3 */
 function dayun(y, m, d, hour, gender, yearGzIdx, monthGan, monthZhi) {
   const yang = yearGzIdx % 2 === 0; // 甲丙戊庚壬=阳
@@ -194,21 +232,45 @@ function ssZhi(dayGanIdx, zhiIdx) {
 }
 function nayinOf(gzIdx) { return NAYIN[Math.floor(gzIdx / 2)]; }
 
-/* ============ 主函数：排盘 ============ */
-function paiPan(y, m, d, hour, gender) {
+/* ============ 主函数：排盘 ============
+ * paiPan(y, m, d, hour, gender, opt)
+ * opt: { minute?: 分钟, lngE?: 东经经度, useSolar?: 是否启用真太阳时校正 }
+ *   - 不传 opt 或 opt.useSolar !== true：保持原算法（钟表时间直接排，23点后日柱进一日）
+ *   - 启用后：先按出生地经度+均时差校正为真太阳时，再用校正时刻定时辰/换日（盲派历法）
+ */
+function paiPan(y, m, d, hour, gender, opt) {
   if (y < 1900 || y > 2049) throw new Error('请选择 1900-2049 年之间的出生日期');
-  // 晚子时（23点）日柱按次日
+  const useSolar = !!(opt && opt.useSolar);
+  const minute = (opt && typeof opt.minute === 'number' && isFinite(opt.minute)) ? opt.minute : 0;
+  const lngE = (opt && typeof opt.lngE === 'number' && isFinite(opt.lngE)) ? opt.lngE : 120;
+
+  // 校正出生时刻 → 真太阳时
+  let solarH = hour, dayShift = 0, solarNote = '';
+  if (useSolar) {
+    const t = trueSolarHour(y, m, d, hour, minute, lngE);
+    solarH = t.solar;
+    dayShift = t.shiftDays;
+    const corrMin = Math.round((solarH - hour - minute / 60) * 60);
+    solarNote = '按出生地东经' + lngE + '°' + (minute ? ' ' + String(minute).padStart(2, '0') + '分' : '') + '真太阳时校正：' + solarHStr(solarH);
+  }
+
+  // 排盘用日期（换日：晚子时23点后 / 真太阳时跨日 → 日柱按次日）
   let dayY = y, dayM = m, dayD = d;
-  if (hour >= 23) {
+  if (useSolar) {
+    if (dayShift !== 0) {
+      const nd = new Date(Date.UTC(y, m - 1, d + dayShift));
+      dayY = nd.getUTCFullYear(); dayM = nd.getUTCMonth() + 1; dayD = nd.getUTCDate();
+    }
+  } else if (hour >= 23) {
     const nd = new Date(Date.UTC(y, m - 1, d + 1));
     dayY = nd.getUTCFullYear(); dayM = nd.getUTCMonth() + 1; dayD = nd.getUTCDate();
   }
   const dayIdx = dayGanzhiIndex(dayY, dayM, dayD);
   const dayGan = dayIdx % 10, dayZhi = dayIdx % 12;
-  const yearIdx = yearGanzhiIndex(y, m, d);
+  const yearIdx = yearGanzhiIndex(dayY, dayM, dayD);
   const yearGan = yearIdx % 10;
-  const mp = monthPillar(y, m, d, yearIdx);
-  const hp = hourPillar(dayGan, hour);
+  const mp = monthPillar(dayY, dayM, dayD, yearIdx);
+  const hp = hourPillar(dayGan, solarH);
   const lunar = solarToLunar(y, m, d);
 
   const pillars = [
@@ -217,7 +279,7 @@ function paiPan(y, m, d, hour, gender) {
     { name: '日柱', gan: dayGan, zhi: dayZhi, gz: GANZHI60[dayIdx], nayin: nayinOf(dayIdx), ssGan: '日主', ssZhi: ssZhi(dayGan, dayZhi) },
     { name: '时柱', gan: hp.gan, zhi: hp.zhi, gz: GAN[hp.gan] + ZHI[hp.zhi], nayin: nayinOf((hp.gan * 12 + hp.zhi) % 60), ssGan: ssGan(dayGan, hp.gan), ssZhi: ssZhi(dayGan, hp.zhi) },
   ];
-  const dy = dayun(y, m, d, hour, gender, yearIdx, mp.gan, mp.zhi);
+  const dy = dayun(dayY, dayM, dayD, solarH, gender, yearIdx, mp.gan, mp.zhi);
 
   // 流年（当前年份，立春界）
   const now = new Date();
@@ -232,6 +294,7 @@ function paiPan(y, m, d, hour, gender) {
 
   return {
     solar: `${y}年${m}月${d}日 ${String(hour).padStart(2, '0')}时`,
+    solarNote,
     lunar: `农历${lunar.year}年${lunar.isLeap ? '闰' : ''}${lunar.month}月${lunar.day}日`,
     gender: gender === 'male' ? '男' : '女',
     dayMaster: GAN[dayGan],
@@ -242,4 +305,11 @@ function paiPan(y, m, d, hour, gender) {
     liuNian,
     hourZhiName: ZHI[hp.zhi],
   };
+}
+
+/* 真太阳时 → 显示文本（如 17.53 → 17:32） */
+function solarHStr(solar) {
+  const h = Math.floor(solar);
+  const m = Math.round((solar - h) * 60);
+  return String(h).padStart(2, '0') + ':' + String(m === 60 ? 0 : m).padStart(2, '0');
 }

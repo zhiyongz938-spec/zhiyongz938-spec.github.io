@@ -1156,7 +1156,58 @@ function renderBazi(){
       <label>补充你的情况（选填，帮助师傅结合你的状态分析）</label>
       <textarea class="form-textarea" id="bzDesc" placeholder="如：26岁，程序员，最近纠结要不要跳槽；或者：想了解未来三年的事业发展…"></textarea>
     </div>
+    <div class="form-row" style="margin-top:2px">
+      <label style="cursor:pointer;user-select:none" onclick="toggleBzSolar()">⚙️ 真太阳时校正（盲派排盘，选填）
+        <span id="bzSolarTag" style="font-size:11px;color:#a2937a;margin-left:4px">点开可填出生地</span>
+      </label>
+      <div id="bzSolarBox" style="display:none;margin-top:6px;border:1px dashed #e0d2ae;border-radius:8px;padding:8px 10px;background:#fffdf6">
+        <div style="font-size:12px;color:#8a7a5c;line-height:1.8;margin-bottom:4px">盲派起盘讲究<b>真太阳时</b>：输入出生地（经度），系统自动把钟表时间校正为当地太阳时再定时辰，四柱才准。不填则按东经120°（北京时间）直接排。</div>
+        <select class="form-input" id="bzCity" onchange="bzCityChanged()" style="margin-bottom:6px">
+          <option value="">— 选择出生城市（常用）—</option>
+          <option value="116.4|北京">北京</option><option value="121.5|上海">上海</option>
+          <option value="113.3|广州">广州</option><option value="114.1|深圳">深圳</option>
+          <option value="104.1|成都">成都</option><option value="106.5|重庆">重庆</option>
+          <option value="108.9|西安">西安</option><option value="114.3|武汉">武汉</option>
+          <option value="103.8|昆明">昆明</option><option value="106.7|贵阳">贵阳</option>
+          <option value="108.3|南宁">南宁</option><option value="113.6|长沙">长沙</option>
+          <option value="112.5|郑州">郑州</option><option value="117.0|济南">济南</option>
+          <option value="118.8|南京">南京</option><option value="120.2|杭州">杭州</option>
+          <option value="119.3|福州">福州</option><option value="117.6|合肥">合肥</option>
+          <option value="112.5|太原">太原</option><option value="114.5|石家庄">石家庄</option>
+          <option value="121.6|沈阳">沈阳</option><option value="125.3|长春">长春</option>
+          <option value="126.6|哈尔滨">哈尔滨</option><option value="87.6|乌鲁木齐">乌鲁木齐</option>
+          <option value="91.1|拉萨">拉萨</option><option value="101.8|兰州">兰州</option>
+          <option value="106.2|银川">银川</option><option value="111.7|呼和浩特">呼和浩特</option>
+          <option value="110.3|海口">海口</option><option value="107.0|西宁">西宁</option>
+          <option value="120.1|青岛">青岛</option><option value="121.5|台北">台北</option>
+          <option value="114.2|香港">香港</option><option value="113.5|澳门">澳门</option>
+        </select>
+        <div class="form-grid two" style="gap:6px">
+          <div class="form-row"><label>或直接填东经经度</label>
+            <input class="form-input" id="bzLng" type="number" min="73" max="135" step="0.1" placeholder="如 104.1（成都）">
+          </div>
+          <div class="form-row"><label>出生分钟</label>
+            <input class="form-input" id="bzMin" type="number" min="0" max="59" placeholder="如 30（不填按整点）">
+          </div>
+        </div>
+      </div>
+    </div>
     <div class="panel-actions"><button class="btn-gold" onclick="doPaiPan()">📜 开始排盘</button></div>`;
+}
+function toggleBzSolar(){
+  const box=document.getElementById('bzSolarBox');
+  const tag=document.getElementById('bzSolarTag');
+  if(!box) return;
+  const show=box.style.display==='none';
+  box.style.display=show?'block':'none';
+  if(tag) tag.textContent=show?'（填出生地后自动按真太阳时排盘）':'';
+}
+function bzCityChanged(){
+  const v=document.getElementById('bzCity').value;
+  if(v){
+    const lng=v.split('|')[0];
+    document.getElementById('bzLng').value=lng;
+  }
 }
 function doPaiPan(){
   const y=parseInt(document.getElementById('bzY').value);
@@ -1168,7 +1219,18 @@ function doPaiPan(){
   if(y<1900||y>2049){ alert('请选择 1900-2049 年之间的年份'); return; }
   const body=document.getElementById('panelBody');
   try{
-    const r=paiPan(y,m,d,h,gender);
+    // 真太阳时校正（盲派起盘）：填了经度才启用
+    const lngEl=document.getElementById('bzLng');
+    const minEl=document.getElementById('bzMin');
+    const lngVal=lngEl?parseFloat(lngEl.value):NaN;
+    const minVal=minEl?parseInt(minEl.value):NaN;
+    const opt={};
+    if(!isNaN(lngVal)&&lngVal>=73&&lngVal<=135){
+      opt.useSolar=true; opt.lngE=lngVal;
+      // 小时选择器表示"该小时 00~59 分"：未填分钟默认取中点 30 分，避免边界误判
+      opt.minute=isNaN(minVal)?30:Math.min(59,Math.max(0,minVal));
+    }
+    const r=paiPan(y,m,d,h,gender,opt);
     window._baziResult=r;
     window._baziQType=document.getElementById('bzQType').value;
     window._baziDesc=document.getElementById('bzDesc').value.trim();
@@ -1205,12 +1267,14 @@ function doPaiPan(){
           <span class="panpai-chip">👤 ${r.gender}命</span>
           <span class="panpai-chip">日主 <b>${r.dayMaster}${r.dayMasterWuxing}</b></span>
           <span class="panpai-chip">生时 <b>${r.hourZhiName}时</b></span>
+          ${r.solarNote?'<span class="panpai-chip" style="border-color:#c9a227;color:#8a6d1a">☀️ '+r.solarNote+'</span>':''}
         </div>
         ${table}
         <div style="margin-top:10px">
           <div style="font-size:13px;color:var(--ink-soft);margin-bottom:4px">大运（${r.dayun.shun?'顺排':'逆排'} · ${startAge}岁${r.dayun.qiYunMonths}个月起运）：</div>
           <div class="dayun-row">${dyHtml}</div>
         </div>
+        <div style="margin-top:6px;font-size:11.5px;color:#a2937a;line-height:1.7">盲派交运歌：八字大运何年起，生月干支做太极；阳男阴女顺着排，阴男阳女排法逆。本命年柱纳音【${r.pillars[0].nayin}】→ ${jiaoYunText(r.pillars[0].nayin)}（换运时间各不同，生年纳音来确定）。</div>
         <div style="margin-top:8px" class="panpai-info">
           <span class="panpai-chip">流年 <b>${r.liuNian.gz}</b>（${r.liuNian.year}）</span>
           <span class="panpai-chip">流年天干 <b>${r.liuNian.ssGan}</b> 见日主</span>
@@ -1219,7 +1283,7 @@ function doPaiPan(){
       </div>
       <div id="baziAiBox"></div>
       <div class="panel-actions"><button class="btn-gold" onclick="aiBazi()">☯ 深度解读（盲派为主）</button></div>
-      <p style="text-align:center;font-size:11.5px;color:#a2937a;margin-top:10px">排盘采用万年历算法；若出生时刻临近交节（前后2小时内），结果可能有出入，请核对。</p>`;
+      <p style="text-align:center;font-size:11.5px;color:#a2937a;margin-top:10px">盲派起盘按真太阳时校正（填了出生地时）；若出生时刻临近交节（前后2小时内），结果可能有出入，请核对。</p>`;
   }catch(e){
     body.innerHTML=`<div class="ai-result"><div class="ai-head">⚠ 排盘失败</div><div class="ai-body">${e.message}</div></div>`;
   }
@@ -1243,7 +1307,7 @@ async function aiBazi(){
   ).join('、');
   const dayunInfo=r.dayun.list.map((g,i)=>r.dayun.qiYunYears+i*10+'岁起'+g).join('，');
   const system='你是顶尖八字命理师（盲派为主：干支象法、宫位取象、做功制化；子平为辅：格局、旺衰、十神），像DeepSeek一样智能且详细。必须严格紧扣求测人提出的具体问题来解读：ta描述了什么情况（如纠结跳槽、身体不适、感情困扰），就围绕那个具体情况重点展开，先直接回应ta的具体问题，再全面展开命局分析。要求极其详细：1）命局总论（日主强弱、五行配置、整体气象）；2）四柱逐一解读（年柱出身与早年、月柱格局与性格、日柱自身与婚姻、时柱归宿与晚运）；3）大运逐段分析（每步大运对ta问题的具体影响，尤其当前所走大运）；4）当前流年详细解读（流年干支、十神对日主的作用、对ta具体问题的吉凶影响）；5）心理层面深入剖析（ta当下的心态、纠结、恐惧与潜在倾向）；6）三条具体可执行建议。说话像朋友聊天：全程大白话、多结合生活场景打比方，专业词出现马上用白话解释，不用编号分点。全文约1500字左右，内容越详细越好。不吓人，断语留余地。';
-  const user='求测人信息：'+r.gender+'命，出生于'+r.solar+'（'+r.lunar+'），'+r.hourZhiName+'时生。日主：'+r.dayMaster+r.dayMasterWuxing+'。\n四柱：'+pillarsInfo+'。\n大运：'+(r.dayun.shun?'顺排':'逆排')+'，'+r.dayun.qiYunYears+'岁'+r.dayun.qiYunMonths+'个月起运：'+dayunInfo+'。\n当前流年：'+r.liuNian.gz+'年（'+r.liuNian.year+'），天干对日主为'+r.liuNian.ssGan+'，地支为'+r.liuNian.ssZhi+'。\n所问之事：'+qtype+'。\n求测人自述：'+(desc||'未说明')+'。\n请详细解读，尤其紧扣所问之事与自述情况。';
+  const user='求测人信息：'+r.gender+'命，出生于'+r.solar+'（'+r.lunar+'），'+r.hourZhiName+'时生'+(r.solarNote?'（'+r.solarNote+'）':'')+'。日主：'+r.dayMaster+r.dayMasterWuxing+'。\n四柱：'+pillarsInfo+'。\n大运：'+(r.dayun.shun?'顺排':'逆排')+'，'+r.dayun.qiYunYears+'岁'+r.dayun.qiYunMonths+'个月起运：'+dayunInfo+'。\n当前流年：'+r.liuNian.gz+'年（'+r.liuNian.year+'），天干对日主为'+r.liuNian.ssGan+'，地支为'+r.liuNian.ssZhi+'。\n所问之事：'+qtype+'。\n求测人自述：'+(desc||'未说明')+'。\n请详细解读，尤其紧扣所问之事与自述情况。';
   try{
     var onTxt = await Promise.race([
       aiAsk(system, user, 2200),
