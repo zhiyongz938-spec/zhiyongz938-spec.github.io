@@ -33,14 +33,19 @@ async function aiAskOnce(system, user, maxTokens, timeoutMs) {
   return j.choices?.[0]?.message?.content || "";
 }
 async function aiAsk(system, user, maxTokens) {
+  // 超时按目标长度分级：短解读 60s，长文(≥1500) 100s；重试 3 次
+  var want = maxTokens || 800;
+  var baseTimeout = want >= 1500 ? 100000 : 60000;
   var lastErr = null;
   for (var attempt = 0; attempt < 3; attempt++) {
     try {
-      return await aiAskOnce(system, user, maxTokens, 70000);
+      return await aiAskOnce(system, user, maxTokens, baseTimeout);
     } catch (e) {
       lastErr = e;
-      // 429 限流/5xx/超时 → 稍候重试；网络失败立即重试
-      await new Promise(function (res) { setTimeout(res, 900 * (attempt + 1)); });
+      var em = String((e && e.message) || '');
+      // 429 限流等久一点；其它失败快速重试（网络抖动多发生在第一次）
+      var delay = /429|rate/i.test(em) ? 1500 * (attempt + 1) : 700 * (attempt + 1);
+      await new Promise(function (res) { setTimeout(res, delay); });
     }
   }
   throw lastErr || new Error("AI 请求失败");
@@ -168,3 +173,36 @@ async function aiAskMessages(messages) {
   if (!r.ok || j.error) throw new Error(j.error?.message || ("HTTP " + r.status));
   return j.choices?.[0]?.message?.content || "";
 }
+
+/* 页面空闲时预热连接：首次请求常因 TLS/CORS 预检慢而失败，提前打一次极短请求 */
+(function warmUp(){
+  try{
+    if (typeof document === 'undefined') return;
+    var started = false;
+    function fire(){
+      if (started) return; started = true;
+      try{
+        var c = new AbortController();
+        setTimeout(function(){ try{c.abort();}catch(e){} }, 8000);
+        fetch("https://api.deepseek.com/chat/completions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": "Bearer " + DS_KEY },
+          body: JSON.stringify({
+            model: "deepseek-v4-flash",
+            messages: [{ role: "user", content: "ping" }],
+            max_tokens: 1,
+            thinking: { type: "disabled" },
+          }),
+          signal: c.signal,
+        }).then(function(r){ return r.json().catch(function(){ return {}; }); })
+          .catch(function(){});
+      }catch(e){}
+    }
+    if (document.readyState === 'complete') { setTimeout(fire, 1500); }
+    else { document.addEventListener('DOMContentLoaded', function(){ setTimeout(fire, 1500); }); }
+    // 用户首次交互时再触发一次（覆盖“DOMContentLoaded 未触发”场景）
+    ['pointerdown','touchstart','keydown'].forEach(function(ev){
+      try{ document.addEventListener(ev, fire, { once: true, passive: true }); }catch(e){}
+    });
+  }catch(e){}
+})();

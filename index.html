@@ -418,7 +418,19 @@ footer{padding:44px 0 56px;background:#f2ead8;border-top:1px solid var(--line)}
   .shichen{grid-template-columns:repeat(4,1fr)}
   .foot-grid{grid-template-columns:1fr;gap:22px}
   .tools-grid{grid-template-columns:repeat(auto-fill,minmax(155px,1fr))}
-  .panel-box{margin:4vh 12px;padding:26px 16px}
+  .panel-box{margin:2vh 10px;padding:22px 14px;max-height:94vh;overflow-y:auto;-webkit-overflow-scrolling:touch}
+  .panel-close{top:10px;right:10px;width:32px;height:32px}
+  .panel-box h2{font-size:19px;padding:0 26px}
+  .panel-box .sub-line{font-size:12px;margin:4px 0 14px}
+  .panel-actions .btn-gold{width:100%;max-width:340px;padding:12px 20px;font-size:15px}
+  .form-input,.form-textarea{font-size:16px}
+  .dayun-item{min-width:82px;padding:10px 12px}
+  .ai-result .ai-body{font-size:15px;line-height:2;padding:14px 14px}
+  .panpai-table{font-size:13px}
+  .panpai-table th,.panpai-table td{padding:7px 4px}
+  .panpai-table td.gzi{font-size:14.5px}
+  .panpai-table td.note{font-size:10.5px;letter-spacing:-.2px}
+  .panpai-chip{font-size:11.5px;padding:4px 10px}
   .free-banner .ribbon{margin-left:0}
 }
 </style>
@@ -678,11 +690,11 @@ footer{padding:44px 0 56px;background:#f2ead8;border-top:1px solid var(--line)}
   <button class="share-close" onclick="document.getElementById('shareModal').classList.remove('open')">收 起</button>
 </div>
 
-<script src="bazi.js?v=20260905"></script>
-<script src="liuyao.js?v=20260905"></script>
-<script src="tarot.js?v=20260905"></script>
-<script src="ai.js?v=20260905"></script>
-<script src="offline.js?v=20260905"></script>
+<script src="bazi.js?v=20260906"></script>
+<script src="liuyao.js?v=20260906"></script>
+<script src="tarot.js?v=20260906"></script>
+<script src="ai.js?v=20260906"></script>
+<script src="offline.js?v=20260906"></script>
 <script src="local.js"></script>
 <script>
 /* ============ 标语 ============ */
@@ -1828,6 +1840,20 @@ function attachDiag(container){
 document.addEventListener('DOMContentLoaded',()=>{
   const g=document.getElementById('heroGd');
   if(g) g.textContent=getGongde();
+  // 缓存自检：ai.js 若被旧缓存命中（调 /api/ai 的代理版），在线解读必然失败降级
+  // → 检测到就提示用户硬刷新一次，避免“内置解读网络受限”反复出现
+  try{
+    if(typeof aiAsk === 'function'){
+      var src = aiAsk.toString();
+      if(src.indexOf('/api/ai') !== -1){
+        setTimeout(function(){
+          if(confirm('检测到页面使用了旧版 AI 文件，可能导致解读失败。\n点击「确定」自动刷新加载新版（推荐）。')){
+            location.reload(true);
+          }
+        }, 600);
+      }
+    }
+  }catch(e){}
 });
 </script>
 </body>
