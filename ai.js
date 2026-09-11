@@ -17,7 +17,9 @@ function mkSignal(timeoutMs) {
  * - 页面来自本机（localhost/127.0.0.1）→ 用相对路径（本机服务器即代理）
  * - 否则 → 读同目录 proxy.json 拿隧道地址（由本机守护脚本发布）
  */
-var _proxyBase = null, _proxyFetching = null;
+var _proxyBase = null, _proxyFetching = null, _proxyDownUntil = 0;
+function proxyDown() { return Date.now() < _proxyDownUntil; }
+function markProxyDown(sec) { _proxyDownUntil = Date.now() + sec * 1000; }
 function loadProxyBase() {
   if (_proxyBase !== null) return Promise.resolve(_proxyBase);
   if (_proxyFetching) return _proxyFetching;
@@ -66,8 +68,10 @@ async function aiAskDirect(system, user, maxTokens, timeoutMs, key) {
 
 /* 基础对话：优先走代理；代理不可用且用户填了自带 key → 直连；都不可用则抛错降级内置 */
 async function aiAskOnce(system, user, maxTokens, timeoutMs) {
-  const base = await loadProxyBase();
-  if (base !== null && base !== undefined) {
+  const key = getUserKey();
+  const canProxy = !proxyDown();
+  const base = canProxy ? await loadProxyBase() : null;
+  if (canProxy && base !== null && base !== undefined) {
     try {
       // 代理通道用较短超时：不可用时快速失败，避免让用户干等
       const proxyTimeout = Math.min(timeoutMs || 60000, 30000);
@@ -82,12 +86,10 @@ async function aiAskOnce(system, user, maxTokens, timeoutMs) {
       if (!r.ok || j.error || j.ok === false) throw new Error(j.error || ("HTTP " + r.status));
       return j.text || "";
     } catch (e) {
-      const key = getUserKey();
       if (key) return await aiAskDirect(system, user, maxTokens, timeoutMs, key);
       throw e;
     }
   }
-  const key = getUserKey();
   if (key) return await aiAskDirect(system, user, maxTokens, timeoutMs, key);
   throw new Error('在线通道未就绪');
 }
@@ -107,6 +109,14 @@ async function aiAsk(system, user, maxTokens) {
       await new Promise(function (res) { setTimeout(res, delay); });
     }
   }
+  // 连续失败：若像是通道/网络问题，短期熔断（3 分钟），
+  // 之后直接走备用通道或内置解读，不再让用户每次白等超时
+  try {
+    var lm = String((lastErr && lastErr.message) || '');
+    if (/通道未就绪|Failed to fetch|NetworkError|network|timeout|aborted/i.test(lm) && !getUserKey()) {
+      markProxyDown(180);
+    }
+  } catch (e) {}
   throw lastErr || new Error("AI 请求失败");
 }
 
@@ -210,9 +220,10 @@ function questionTypeSelect(selected) {
 
 /* 多轮对话：优先代理，其次用户自带 key 直连；失败自动重试 3 次 */
 async function aiAskMessagesOnce(messages, timeoutMs) {
-  const base = await loadProxyBase();
   const key = getUserKey();
-  if (base !== null && base !== undefined) {
+  const canProxy = !proxyDown();
+  const base = canProxy ? await loadProxyBase() : null;
+  if (canProxy && base !== null && base !== undefined) {
     try {
       const r = await fetch((base || '') + '/api/ai', {
         method: "POST",
