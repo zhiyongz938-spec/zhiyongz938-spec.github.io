@@ -154,8 +154,8 @@ function questionTypeSelect(selected) {
   return `<div class="qtype-wrap"><span class="qtype-lbl">所问之事：</span><div class="qtype-btns">${opts}</div></div>`;
 }
 
-/* 多轮对话：发送完整 messages 数组（带记忆） */
-async function aiAskMessages(messages) {
+/* 多轮对话：发送完整 messages 数组（带记忆）；失败自动重试 2 次 */
+async function aiAskMessagesOnce(messages, timeoutMs) {
   const r = await fetch("https://api.deepseek.com/chat/completions", {
     method: "POST",
     headers: { "Content-Type": "application/json", "Authorization": "Bearer " + DS_KEY },
@@ -166,12 +166,24 @@ async function aiAskMessages(messages) {
       max_tokens: 1000,
       thinking: { type: "disabled" },
     }),
-    signal: mkSignal(45000),
+    signal: mkSignal(timeoutMs || 45000),
   });
   let j;
   try { j = await r.json(); } catch (e) { throw new Error("服务响应异常（HTTP " + r.status + "）"); }
   if (!r.ok || j.error) throw new Error(j.error?.message || ("HTTP " + r.status));
   return j.choices?.[0]?.message?.content || "";
+}
+async function aiAskMessages(messages) {
+  var lastErr = null;
+  for (var attempt = 0; attempt < 3; attempt++) {
+    try {
+      return await aiAskMessagesOnce(messages, 55000);
+    } catch (e) {
+      lastErr = e;
+      await new Promise(function (res) { setTimeout(res, 700 * (attempt + 1)); });
+    }
+  }
+  throw lastErr || new Error("AI 请求失败");
 }
 
 /* 页面空闲时预热连接：首次请求常因 TLS/CORS 预检慢而失败，提前打一次极短请求 */
