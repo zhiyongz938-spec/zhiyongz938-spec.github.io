@@ -71,6 +71,12 @@ function monthDays(y, m) { return (lunarInfo[y - 1900] & (0x10000 >> m)) ? 30 : 
 /* 公历转农历 */
 function solarToLunar(y, m, d) {
   let offset = (Date.UTC(y, m - 1, d) - Date.UTC(1900, 0, 31)) / 86400000;
+  // 边界：1900-01-01 ~ 1900-01-30 属于农历 1899 年腊月（十二月），
+  // 基准日之前 offset 为负会导致月份/日期算出 0 月 -29 日，这里单独处理。
+  if (offset < 0) {
+    const day = 30 + offset + 1; // 腊月初一 = 1900-01-01
+    return { year: 1899, month: 12, day: Math.max(1, Math.min(30, Math.round(day))), isLeap: false };
+  }
   let temp = 0, i;
   for (i = 1900; i < 2050 && offset > 0; i++) { temp = lYearDays(i); offset -= temp; }
   if (offset < 0) { offset += temp; i--; }
@@ -203,7 +209,9 @@ function dayun(y, m, d, hour, gender, yearGzIdx, monthGan, monthZhi) {
     const xhMs = Date.UTC(y, xh.month - 1, xh.day, 2);
     if (xhMs <= birth) lastMs = Math.max(lastMs || 0, xhMs);
     if (lastMs === null) {
-      const t = sTerm(y - 1, 0); // 上一年小寒
+      // 出生在当年小寒之前（1月初）→ 上一个节应为「上一年大雪」(12/7)。
+      // 若误用上一年小寒(1/6)，起运天数会变成约360天（起运上百岁）。
+      const t = sTerm(y - 1, 22); // 大雪
       lastMs = Date.UTC(y - 1, t.month - 1, t.day, 2);
     }
     targetMs = lastMs;
