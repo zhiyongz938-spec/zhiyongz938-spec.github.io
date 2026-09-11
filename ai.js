@@ -41,20 +41,55 @@ function loadProxyBase() {
   return _proxyFetching;
 }
 
-/* 基础对话：system + user，maxTokens 为输出上限（失败自动重试 3 次） */
-async function aiAskOnce(system, user, maxTokens, timeoutMs) {
-  const base = await loadProxyBase();
-  if (base === null || base === undefined) throw new Error('在线通道未就绪');
-  const r = await fetch((base || '') + '/api/ai', {
+/* 用户自带 key（可选）：代理不可用时的直连后备，key 只存在本机浏览器里 */
+function getUserKey() {
+  try { return (localStorage.getItem('wlm_ai_key') || '').trim(); } catch (e) { return ''; }
+}
+async function aiAskDirect(system, user, maxTokens, timeoutMs, key) {
+  const r = await fetch("https://api.deepseek.com/chat/completions", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ system: system, user: user, max_tokens: maxTokens || 800 }),
+    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + key },
+    body: JSON.stringify({
+      model: "deepseek-v4-flash",
+      messages: [...(system ? [{ role: "system", content: system }] : []), { role: "user", content: user }],
+      temperature: 0.75,
+      max_tokens: maxTokens || 800,
+      thinking: { type: "disabled" },
+    }),
     signal: mkSignal(timeoutMs || 60000),
   });
   let j;
   try { j = await r.json(); } catch (e) { throw new Error("服务响应异常（HTTP " + r.status + "）"); }
-  if (!r.ok || j.error || j.ok === false) throw new Error(j.error || ("HTTP " + r.status));
-  return j.text || "";
+  if (!r.ok || j.error) throw new Error(j.error?.message || ("HTTP " + r.status));
+  return j.choices?.[0]?.message?.content || "";
+}
+
+/* 基础对话：优先走代理；代理不可用且用户填了自带 key → 直连；都不可用则抛错降级内置 */
+async function aiAskOnce(system, user, maxTokens, timeoutMs) {
+  const base = await loadProxyBase();
+  if (base !== null && base !== undefined) {
+    try {
+      // 代理通道用较短超时：不可用时快速失败，避免让用户干等
+      const proxyTimeout = Math.min(timeoutMs || 60000, 30000);
+      const r = await fetch((base || '') + '/api/ai', {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ system: system, user: user, max_tokens: maxTokens || 800 }),
+        signal: mkSignal(proxyTimeout),
+      });
+      let j;
+      try { j = await r.json(); } catch (e) { throw new Error("服务响应异常（HTTP " + r.status + "）"); }
+      if (!r.ok || j.error || j.ok === false) throw new Error(j.error || ("HTTP " + r.status));
+      return j.text || "";
+    } catch (e) {
+      const key = getUserKey();
+      if (key) return await aiAskDirect(system, user, maxTokens, timeoutMs, key);
+      throw e;
+    }
+  }
+  const key = getUserKey();
+  if (key) return await aiAskDirect(system, user, maxTokens, timeoutMs, key);
+  throw new Error('在线通道未就绪');
 }
 async function aiAsk(system, user, maxTokens) {
   // 超时按目标长度分级：短解读 60s，长文(≥1500) 100s；重试 3 次
@@ -173,20 +208,39 @@ function questionTypeSelect(selected) {
   return `<div class="qtype-wrap"><span class="qtype-lbl">所问之事：</span><div class="qtype-btns">${opts}</div></div>`;
 }
 
-/* 多轮对话：发送完整 messages 数组（带记忆，经代理）；失败自动重试 3 次 */
+/* 多轮对话：优先代理，其次用户自带 key 直连；失败自动重试 3 次 */
 async function aiAskMessagesOnce(messages, timeoutMs) {
   const base = await loadProxyBase();
-  if (base === null || base === undefined) throw new Error('在线通道未就绪');
-  const r = await fetch((base || '') + '/api/ai', {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages: messages, max_tokens: 1000 }),
-    signal: mkSignal(timeoutMs || 45000),
-  });
-  let j;
-  try { j = await r.json(); } catch (e) { throw new Error("服务响应异常（HTTP " + r.status + "）"); }
-  if (!r.ok || j.error || j.ok === false) throw new Error(j.error || ("HTTP " + r.status));
-  return j.text || "";
+  const key = getUserKey();
+  if (base !== null && base !== undefined) {
+    try {
+      const r = await fetch((base || '') + '/api/ai', {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: messages, max_tokens: 1000 }),
+        signal: mkSignal(timeoutMs || 45000),
+      });
+      let j;
+      try { j = await r.json(); } catch (e) { throw new Error("服务响应异常（HTTP " + r.status + "）"); }
+      if (!r.ok || j.error || j.ok === false) throw new Error(j.error || ("HTTP " + r.status));
+      return j.text || "";
+    } catch (e) {
+      if (!key) throw e;
+    }
+  }
+  if (key) {
+    const r = await fetch("https://api.deepseek.com/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + key },
+      body: JSON.stringify({ model: "deepseek-v4-flash", messages: messages, temperature: 0.75, max_tokens: 1000, thinking: { type: "disabled" } }),
+      signal: mkSignal(timeoutMs || 45000),
+    });
+    let j;
+    try { j = await r.json(); } catch (e) { throw new Error("服务响应异常（HTTP " + r.status + "）"); }
+    if (!r.ok || j.error) throw new Error(j.error?.message || ("HTTP " + r.status));
+    return j.choices?.[0]?.message?.content || "";
+  }
+  throw new Error('在线通道未就绪');
 }
 async function aiAskMessages(messages) {
   var lastErr = null;
