@@ -1,8 +1,8 @@
 /* ============================================
- * AI 解析封装 ai.js —— GitHub Pages 直连版
- * 浏览器直连 api.deepseek.com（无需服务器）
+ * AI 解析封装 ai.js —— 代理版
+ * 浏览器不直连、不携带 API key：请求本机隧道代理 /api/ai，
+ * key 只保存在服务端。代理地址从同目录 proxy.json 动态获取。
  * ============================================ */
-const DS_KEY = "sk-5b471cd9a84d4671b3eb4534097c50ce";
 
 /* 兼容旧浏览器的超时控制：返回 signal 或 undefined */
 function mkSignal(timeoutMs) {
@@ -13,24 +13,48 @@ function mkSignal(timeoutMs) {
   } catch (e) { return undefined; }
 }
 
-/* 基础对话：system + user，maxTokens 为输出上限（失败自动重试 2 次，抗网络抖动） */
+/* 解析代理基址：
+ * - 页面来自本机（localhost/127.0.0.1）→ 用相对路径（本机服务器即代理）
+ * - 否则 → 读同目录 proxy.json 拿隧道地址（由本机守护脚本发布）
+ */
+var _proxyBase = null, _proxyFetching = null;
+function loadProxyBase() {
+  if (_proxyBase !== null) return Promise.resolve(_proxyBase);
+  if (_proxyFetching) return _proxyFetching;
+  _proxyFetching = (function () {
+    try {
+      var h = location.hostname || '';
+      if (h === 'localhost' || h === '127.0.0.1' || h.indexOf('192.168.') === 0 || h.indexOf('10.') === 0) {
+        _proxyBase = '';
+        return Promise.resolve('');
+      }
+    } catch (e) {}
+    return fetch('proxy.json?t=' + Date.now(), { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        if (j && j.url) _proxyBase = String(j.url).replace(/\/+$/, '');
+        return _proxyBase;
+      })
+      .catch(function () { return _proxyBase; })
+      .then(function (b) { _proxyFetching = null; return b; });
+  })();
+  return _proxyFetching;
+}
+
+/* 基础对话：system + user，maxTokens 为输出上限（失败自动重试 3 次） */
 async function aiAskOnce(system, user, maxTokens, timeoutMs) {
-  const r = await fetch("https://api.deepseek.com/chat/completions", {
+  const base = await loadProxyBase();
+  if (base === null || base === undefined) throw new Error('在线通道未就绪');
+  const r = await fetch((base || '') + '/api/ai', {
     method: "POST",
-    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + DS_KEY },
-    body: JSON.stringify({
-      model: "deepseek-v4-flash",
-      messages: [...(system ? [{ role: "system", content: system }] : []), { role: "user", content: user }],
-      temperature: 0.75,
-      max_tokens: maxTokens || 800,
-      thinking: { type: "disabled" },
-    }),
-    signal: mkSignal(timeoutMs || 70000),
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ system: system, user: user, max_tokens: maxTokens || 800 }),
+    signal: mkSignal(timeoutMs || 60000),
   });
   let j;
   try { j = await r.json(); } catch (e) { throw new Error("服务响应异常（HTTP " + r.status + "）"); }
-  if (!r.ok || j.error) throw new Error(j.error?.message || ("HTTP " + r.status));
-  return j.choices?.[0]?.message?.content || "";
+  if (!r.ok || j.error || j.ok === false) throw new Error(j.error || ("HTTP " + r.status));
+  return j.text || "";
 }
 async function aiAsk(system, user, maxTokens) {
   // 超时按目标长度分级：短解读 60s，长文(≥1500) 100s；重试 3 次
@@ -51,19 +75,14 @@ async function aiAsk(system, user, maxTokens) {
   throw lastErr || new Error("AI 请求失败");
 }
 
-/* 流式 AI：边生成边返回（SSE） */
+/* 流式 AI：边生成边返回（SSE，经代理转发） */
 async function aiAskStream(system, user, onDelta) {
-  const r = await fetch("https://api.deepseek.com/chat/completions", {
+  const base = await loadProxyBase();
+  if (base === null || base === undefined) throw new Error('在线通道未就绪');
+  const r = await fetch((base || '') + '/api/ai', {
     method: "POST",
-    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + DS_KEY },
-    body: JSON.stringify({
-      model: "deepseek-v4-flash",
-      messages: [...(system ? [{ role: "system", content: system }] : []), { role: "user", content: user }],
-      temperature: 0.75,
-      max_tokens: 800,
-      stream: true,
-      thinking: { type: "disabled" },
-    }),
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ system: system, user: user, stream: true }),
     signal: mkSignal(75000),
   });
   if (!r.ok || !r.body) {
@@ -154,24 +173,20 @@ function questionTypeSelect(selected) {
   return `<div class="qtype-wrap"><span class="qtype-lbl">所问之事：</span><div class="qtype-btns">${opts}</div></div>`;
 }
 
-/* 多轮对话：发送完整 messages 数组（带记忆）；失败自动重试 2 次 */
+/* 多轮对话：发送完整 messages 数组（带记忆，经代理）；失败自动重试 3 次 */
 async function aiAskMessagesOnce(messages, timeoutMs) {
-  const r = await fetch("https://api.deepseek.com/chat/completions", {
+  const base = await loadProxyBase();
+  if (base === null || base === undefined) throw new Error('在线通道未就绪');
+  const r = await fetch((base || '') + '/api/ai', {
     method: "POST",
-    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + DS_KEY },
-    body: JSON.stringify({
-      model: "deepseek-v4-flash",
-      messages: messages,
-      temperature: 0.75,
-      max_tokens: 1000,
-      thinking: { type: "disabled" },
-    }),
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ messages: messages, max_tokens: 1000 }),
     signal: mkSignal(timeoutMs || 45000),
   });
   let j;
   try { j = await r.json(); } catch (e) { throw new Error("服务响应异常（HTTP " + r.status + "）"); }
-  if (!r.ok || j.error) throw new Error(j.error?.message || ("HTTP " + r.status));
-  return j.choices?.[0]?.message?.content || "";
+  if (!r.ok || j.error || j.ok === false) throw new Error(j.error || ("HTTP " + r.status));
+  return j.text || "";
 }
 async function aiAskMessages(messages) {
   var lastErr = null;
@@ -186,7 +201,8 @@ async function aiAskMessages(messages) {
   throw lastErr || new Error("AI 请求失败");
 }
 
-/* 页面空闲时预热连接：首次请求常因 TLS/CORS 预检慢而失败，提前打一次极短请求 */
+/* 页面空闲时预热：提前取好代理地址并打一次极短请求，
+ * 这样用户点“深度解读”时连接已就绪，成功率和速度都更好 */
 (function warmUp(){
   try{
     if (typeof document === 'undefined') return;
@@ -194,25 +210,23 @@ async function aiAskMessages(messages) {
     function fire(){
       if (started) return; started = true;
       try{
-        var c = new AbortController();
-        setTimeout(function(){ try{c.abort();}catch(e){} }, 8000);
-        fetch("https://api.deepseek.com/chat/completions", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "Authorization": "Bearer " + DS_KEY },
-          body: JSON.stringify({
-            model: "deepseek-v4-flash",
-            messages: [{ role: "user", content: "ping" }],
-            max_tokens: 1,
-            thinking: { type: "disabled" },
-          }),
-          signal: c.signal,
-        }).then(function(r){ return r.json().catch(function(){ return {}; }); })
+        loadProxyBase().then(function(base){
+          if (base === null || base === undefined) return;
+          var c = new AbortController();
+          setTimeout(function(){ try{c.abort();}catch(e){} }, 12000);
+          return fetch((base || '') + '/api/ai', {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ system: 'ping', user: 'ping', max_tokens: 1 }),
+            signal: c.signal,
+          });
+        }).then(function(r){ if(r) return r.json().catch(function(){ return {}; }); })
           .catch(function(){});
       }catch(e){}
     }
-    if (document.readyState === 'complete') { setTimeout(fire, 1500); }
-    else { document.addEventListener('DOMContentLoaded', function(){ setTimeout(fire, 1500); }); }
-    // 用户首次交互时再触发一次（覆盖“DOMContentLoaded 未触发”场景）
+    if (document.readyState === 'complete') { setTimeout(fire, 1200); }
+    else { document.addEventListener('DOMContentLoaded', function(){ setTimeout(fire, 1200); }); }
+    // 用户首次交互时再触发一次（覆盖 DOMContentLoaded 未触发场景）
     ['pointerdown','touchstart','keydown'].forEach(function(ev){
       try{ document.addEventListener(ev, fire, { once: true, passive: true }); }catch(e){}
     });
