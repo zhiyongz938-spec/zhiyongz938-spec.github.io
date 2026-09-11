@@ -19,14 +19,19 @@
   --shadow:0 6px 24px rgba(61,50,38,.09);
 }
 *{margin:0;padding:0;box-sizing:border-box}
-html{scroll-behavior:smooth}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
 body{
   font-family:-apple-system,"PingFang SC","HarmonyOS Sans SC","Microsoft YaHei",sans-serif;
   background:var(--paper);
   color:var(--ink);
   line-height:1.7;
   min-height:100vh;
+  -webkit-tap-highlight-color:transparent;
+  -webkit-font-smoothing:antialiased;
+  overflow-x:hidden;
 }
+button,input,select,textarea{font-family:inherit;-webkit-tap-highlight-color:transparent}
+button{touch-action:manipulation}
 .serif{font-family:"KaiTi","STKaiti","Noto Serif SC","Songti SC",serif}
 .wrap{max-width:1080px;margin:0 auto;padding:0 20px}
 
@@ -690,11 +695,11 @@ footer{padding:44px 0 56px;background:#f2ead8;border-top:1px solid var(--line)}
   <button class="share-close" onclick="document.getElementById('shareModal').classList.remove('open')">收 起</button>
 </div>
 
-<script src="bazi.js?v=20260906"></script>
-<script src="liuyao.js?v=20260906"></script>
-<script src="tarot.js?v=20260906"></script>
-<script src="ai.js?v=20260906"></script>
-<script src="offline.js?v=20260906"></script>
+<script src="bazi.js?v=20260907"></script>
+<script src="liuyao.js?v=20260907"></script>
+<script src="tarot.js?v=20260907"></script>
+<script src="ai.js?v=20260907"></script>
+<script src="offline.js?v=20260907"></script>
 <script src="local.js"></script>
 <script>
 /* ============ 标语 ============ */
@@ -912,11 +917,36 @@ async function sendFollowup(){
     _chatCtx.history.push({ role: 'assistant', content: answer });
   }catch(e){
     if(lDiv.parentNode) lDiv.remove();
+    var em = String((e && e.message) || e || '未知错误').slice(0, 100);
+    if(/timeout/i.test(em)) em = '请求超时（网络较慢）';
+    else if(/Failed to fetch|NetworkError|network/i.test(em)) em = '浏览器无法连接 AI 服务';
     var eDiv = document.createElement('div');
     eDiv.style.cssText = 'color:#b03a2e;font-size:13px;margin:4px 0';
-    eDiv.textContent = '网络连接不稳定，请稍后重试。';
+    eDiv.textContent = '这次没答上来（' + em + '）。可以再发一次，或点下方「🔧 诊断网络」看看。';
     hist.insertBefore(eDiv, hist.firstChild);
+    // 失败时补一个重发按钮（保留问题不丢）
+    var rDiv = document.createElement('div');
+    rDiv.style.cssText = 'text-align:center;margin:6px 0';
+    rDiv.innerHTML = '<button class="btn-gold" style="padding:6px 18px;font-size:13px" onclick="resendFollowup(this)" data-q="' + String(q).replace(/"/g, '&quot;') + '">🔄 重新发送</button> <button class="btn-gold" style="padding:6px 18px;font-size:13px;margin-left:6px" onclick="selfTestAI()">🔧 诊断网络</button>';
+    hist.insertBefore(rDiv, hist.firstChild);
   }
+}
+
+/* 追问重发：把上一次问题重新发一遍（先移除失败时残留的重复记录） */
+async function resendFollowup(btn){
+  var q = btn && btn.getAttribute ? btn.getAttribute('data-q') : '';
+  var input = document.getElementById('followupInput');
+  if(!input || !q) return;
+  try{
+    if(_chatCtx && _chatCtx.history && _chatCtx.history.length){
+      var last = _chatCtx.history[_chatCtx.history.length - 1];
+      if(last && last.role === 'user' && last.content === q) _chatCtx.history.pop();
+    }
+  }catch(e){}
+  input.value = q;
+  var wrap = btn.parentNode;
+  if(wrap && wrap.parentNode) wrap.parentNode.removeChild(wrap);
+  await sendFollowup();
 }
 
 /* ============ 摇卦（装卦 + 深度解读） ============ */
@@ -1103,6 +1133,18 @@ async function aiLiuyao(){
   var lineDetail = (lastYaoResult.gua.lines || []).map(function(l){
     return l.idx + "爻[" + l.liuShen + "] " + l.zhi + l.qin + (l.shi ? "(世)" : "") + (l.ying ? "(应)" : "") + (l.bian ? "⚡动" : "");
   }).join("；");
+  // 用神：按所问之事取用（事业/感情看官鬼、财运看妻财、学业看父母、健康看子孙…），并标出卦中对应爻
+  var yongName = "";
+  try { if (typeof yongShenFor === 'function') yongName = yongShenFor(qt, lastYaoResult.dayGanIdx); } catch (e) {}
+  var yongLines = [];
+  (lastYaoResult.gua.lines || []).forEach(function(l){
+    if (yongName === '世爻' ? l.shi : (yongName && l.qin === yongName)) yongLines.push(l);
+  });
+  var yongStr = yongName
+    ? ("用神：" + yongName + (yongLines.length
+        ? "（卦中见 " + yongLines.map(function(l){ return l.idx + "爻 " + l.zhi + l.qin + (l.shi ? "世" : "") + (l.ying ? "应" : "") + (l.bian ? "动" : ""); }).join("、") + "）"
+        : "（卦中未上卦，请结合伏神/日月论）"))
+    : "";
   var sys2 = "你是精通六爻断卦的民间师傅（京房纳甲+《增删卜易》体系），擅长把卦讲得让外行一听就懂。必须严格紧扣求测人的具体问题和自述来解：ta遇到什么、纠结什么，就围绕那个具体情境展开，先直接回答ta的问题，再结合卦象逐层细讲。\n"
     + "要求（输出请自然成段，不要用'第一、第二'编号）：\n"
     + "1. 开头一句白话点破本卦整体格局（卦名+世应+动变给你什么总印象），像师傅开口定调；\n"
@@ -1111,7 +1153,7 @@ async function aiLiuyao(){
     + "4. 心理剖析：结合ta自述的状态（纠结、焦虑、期待），说出ta当下的心态与潜在倾向，要有共情；\n"
     + "5. 收尾给两三条具体、可落地的建议，再留一句温暖有盼头的话。\n"
     + "全程口语化、生活化、像朋友聊天，无AI腔。全文600~800字。不贩卖焦虑，断语留余地。";
-  var usr2 = "问：" + qt + "。求测人自述：" + (window._yaoDesc || "未说明") + "。\n本卦：" + guaInfo + "\n逐爻详情：" + (lineDetail || "无") + "。\n请综合整个卦象，紧扣所问细致解读。";
+  var usr2 = "问：" + qt + "。求测人自述：" + (window._yaoDesc || "未说明") + "。\n本卦：" + guaInfo + "\n逐爻详情：" + (lineDetail || "无") + "。\n" + (yongStr ? yongStr + "（断卦以用神为主，请围绕用神旺衰、与世应动变的关系来讲）\n" : "") + "请综合整个卦象，紧扣所问细致解读。";
   window._chatCtxData = { system: sys2, context: usr2 };
   try{
     var onTxt = await Promise.race([aiAsk(sys2,usr2,1500), new Promise(function(_,rej){setTimeout(function(){rej(new Error("timeout"));},95000);})]);
@@ -1372,10 +1414,12 @@ async function aiBazi(){
     if (nowY >= yr && nowY < yr + 10) { curDayun = g; curAgeStart = r.dayun.jiaoYunXuSui + i * 10; curYrStart = yr; }
   });
   const user='求测人信息：'+r.gender+'命，出生于'+r.solar+'（'+r.lunar+'），'+r.hourZhiName+'时生'+(r.solarNote?'（'+r.solarNote+'）':'')+'。日主：'+r.dayMaster+r.dayMasterWuxing+'。\n四柱：'+pillarsInfo+'。\n大运：'+(r.dayun.shun?'顺排':'逆排')+'，出生后'+r.dayun.qiYunYears+'岁'+r.dayun.qiYunMonths+'个月起运，'+r.dayun.jiaoYunYear+'年交运（'+r.dayun.jiaoYunXuSui+'虚岁）：'+dayunInfo+'。\n求测人今年虚岁约'+ageNow+'，当前正走【'+curDayun+'】大运（'+curAgeStart+'~'+(curAgeStart+10)+'虚岁，'+curYrStart+'~'+(curYrStart+10)+'年）'+(curDayun?'，请重点分析这步大运':'')+'。\n当前流年：'+r.liuNian.gz+'年（'+r.liuNian.year+'），天干对日主为'+r.liuNian.ssGan+'，地支为'+r.liuNian.ssZhi+'。\n所问之事：'+qtype+'。\n求测人自述：'+(desc||'未说明')+'。\n请详细解读，尤其紧扣所问之事与自述情况。';
+  // 记录追问上下文（“继续询问”依赖），含八字命盘完整信息
+  window._chatCtxData = { system: system, context: user };
   try{
     var onTxt = await Promise.race([
       aiAsk(system, user, 2200),
-      new Promise(function(_, rej){ setTimeout(function(){ rej(new Error('timeout')); }, 90000); })
+      new Promise(function(_, rej){ setTimeout(function(){ rej(new Error('timeout')); }, 115000); })
     ]);
     if(onTxt){
       box.innerHTML = '<div class="ai-result"><div class="ai-head">📜 按【'+qtype+'】方向解读<span style="font-size:11px;margin-left:8px;color:#a2937a">⚡ 在线深度解读</span></div><div class="ai-body">'+mdRender(onTxt)+'</div></div><div class="panel-actions"><button class="btn-gold" onclick="continueAsk(\'bazi\')">💬 继续询问</button></div>';
