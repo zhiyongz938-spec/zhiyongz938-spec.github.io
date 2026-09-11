@@ -695,11 +695,11 @@ footer{padding:44px 0 56px;background:#f2ead8;border-top:1px solid var(--line)}
   <button class="share-close" onclick="document.getElementById('shareModal').classList.remove('open')">收 起</button>
 </div>
 
-<script src="bazi.js?v=20260908"></script>
-<script src="liuyao.js?v=20260908"></script>
-<script src="tarot.js?v=20260908"></script>
-<script src="ai.js?v=20260908"></script>
-<script src="offline.js?v=20260908"></script>
+<script src="bazi.js?v=20260909"></script>
+<script src="liuyao.js?v=20260909"></script>
+<script src="tarot.js?v=20260909"></script>
+<script src="ai.js?v=20260909"></script>
+<script src="offline.js?v=20260909"></script>
 <script src="local.js"></script>
 <script>
 /* ============ 标语 ============ */
@@ -1438,7 +1438,7 @@ async function aiBazi(){
     try{
       var offlineText = offlineBazi(r, qtype, desc);
       if(offlineText){
-        box.innerHTML = '<div class="ai-result"><div class="ai-head">📜 按【'+qtype+'】方向解读<span style="font-size:11px;margin-left:8px;color:#a2937a">📴 内置解读（在线失败：'+errMsg+'）</span></div><div class="ai-body">'+mdRender(offlineText)+'</div></div><div style="text-align:center;margin-top:8px"><button class="btn-gold" onclick="retryBazi()">🔄 重试在线解读</button> <button class="btn-gold" style="margin-left:6px" onclick="selfTestAI()">🔧 诊断网络</button></div>';
+        box.innerHTML = '<div class="ai-result"><div class="ai-head">📜 按【'+qtype+'】方向解读<span style="font-size:11px;margin-left:8px;color:#a2937a">📴 内置解读（在线失败：'+errMsg+'）</span></div><div class="ai-body">'+mdRender(offlineText)+'</div></div><div style="text-align:center;margin-top:8px"><button class="btn-gold" onclick="retryBazi()">🔄 重试在线解读</button> <button class="btn-gold" style="margin-left:6px" onclick="selfTestAI()">🔧 诊断网络</button> <button class="btn-gold" style="margin-left:6px;padding:6px 14px;font-size:13px" onclick="setAiKey()">🔑 备用通道</button></div>';
       }
     }catch(e2){ box.innerHTML = '<div class="ai-result"><div class="ai-head">⚠ 暂时无法解读</div><div class="ai-body">'+errMsg+'，请稍后重试。</div></div>'; }
   }
@@ -1577,7 +1577,7 @@ async function aiTarot(){
     try{
       var offlineText = offlineTarot(lastTarotCards, qt, desc);
       if(offlineText){
-        box.innerHTML = '<div class="ai-result"><div class="ai-head">🔮 按【'+qt+'】方向解读<span style="font-size:11px;margin-left:8px;color:#a2937a">📴 内置解读（在线失败：'+errMsg+'）</span></div><div class="ai-body">'+mdRender(offlineText)+'</div></div><div style="text-align:center;margin-top:8px"><button class="btn-gold" onclick="retryTarot()">🔄 重试在线解读</button> <button class="btn-gold" style="margin-left:6px" onclick="selfTestAI()">🔧 诊断网络</button></div>';
+        box.innerHTML = '<div class="ai-result"><div class="ai-head">🔮 按【'+qt+'】方向解读<span style="font-size:11px;margin-left:8px;color:#a2937a">📴 内置解读（在线失败：'+errMsg+'）</span></div><div class="ai-body">'+mdRender(offlineText)+'</div></div><div style="text-align:center;margin-top:8px"><button class="btn-gold" onclick="retryTarot()">🔄 重试在线解读</button> <button class="btn-gold" style="margin-left:6px" onclick="selfTestAI()">🔧 诊断网络</button> <button class="btn-gold" style="margin-left:6px;padding:6px 14px;font-size:13px" onclick="setAiKey()">🔑 备用通道</button></div>';
       }
     }catch(e2){ box.innerHTML = '<div class="ai-result"><div class="ai-head">⚠ 暂时无法解读</div><div class="ai-body">'+errMsg+'，请稍后重试。</div></div>'; }
   }
@@ -1829,7 +1829,7 @@ function openTool(id){
   document.getElementById('panelTitle').textContent=title;
   document.getElementById('panelSub').textContent=sub;
   const pf=document.querySelector('#toolPanel .panel-foot');
-  if(pf) pf.innerHTML = renderEngineSwitch() + '<div style="margin-top:6px">仅供传统文化体验与自我观察参考</div>';
+  if(pf) pf.innerHTML = renderEngineSwitch() + '<div style="margin-top:6px;font-size:12px"><a href="javascript:setAiKey()" style="color:#a2937a">🔑 备用通道设置</a></div>' + '<div style="margin-top:6px">仅供传统文化体验与自我观察参考</div>';
   fn();
 }
 function closeTool(){ document.getElementById('toolPanel').classList.remove('open'); }
@@ -1850,23 +1850,36 @@ function retryBazi(){ if(typeof aiBazi==='function') aiBazi(); }
 function retryTarot(){ if(typeof aiTarot==='function') aiTarot(); }
 
 /* AI 连通性自检：直接向 DeepSeek 发一条极短请求，显示浏览器侧真实结果 */
+/* 备用通道：填写自己的 API Key（仅存本机浏览器，在线通道不可用时使用） */
+function setAiKey(){
+  var cur = '';
+  try { cur = localStorage.getItem('wlm_ai_key') || ''; } catch(e) {}
+  var v = prompt('备用通道：填写你自己的 DeepSeek API Key\n（只保存在本机浏览器，用于在线通道繁忙/中断时继续使用；留空则清除）', cur ? (cur.slice(0, 8) + '…') : '');
+  if(v === null) return;
+  v = String(v).trim();
+  try{
+    if(v) { localStorage.setItem('wlm_ai_key', v); alert('已保存 ✓ 在线通道不可用时会自动使用它。'); }
+    else { localStorage.removeItem('wlm_ai_key'); alert('已清除备用 Key。'); }
+  }catch(e){ alert('保存失败：' + e.message); }
+}
+
 async function selfTestAI(){
   var box = document.getElementById('baziAiBox') || document.getElementById('yaoAiBox') || document.getElementById('tarotAiBox');
   if(!box) return;
-  box.innerHTML = '<div class="ai-result"><div class="ai-head">🔧 AI 连通自检</div><div class="ai-body" id="selftestBody">正在测试浏览器直连 DeepSeek…</div></div>';
+  box.innerHTML = '<div class="ai-result"><div class="ai-head">🔧 AI 连通自检</div><div class="ai-body" id="selftestBody">正在测试 AI 通道…</div></div>';
   var body = document.getElementById('selftestBody');
   try{
     var t0 = Date.now();
     var msg = await aiAsk('你是连通性测试助手，只回复两个字：正常', '测试', 20);
     var cost = ((Date.now()-t0)/1000).toFixed(1);
-    body.innerHTML = '<b style="color:#3a7d44">✅ 直连成功</b>（' + cost + ' 秒）：AI 回复「' + msg + '」<br><span style="font-size:12px;color:#8a7a5c">说明网络与接口正常，刚才是偶发失败，点上方「重试在线解读」即可。</span>';
+    body.innerHTML = '<b style="color:#3a7d44">✅ 通道正常</b>（' + cost + ' 秒）：AI 回复「' + msg + '」<br><span style="font-size:12px;color:#8a7a5c">刚才是偶发失败，点上方「重试在线解读」即可。</span>';
   }catch(e){
     var em = String((e && e.message) || e || '').slice(0, 160);
     if(/timeout/i.test(em)) em = '请求超时：浏览器到 api.deepseek.com 连接慢或被中断';
     else if(/Failed to fetch|NetworkError/i.test(em)) em = '浏览器无法连接 api.deepseek.com（网络/防火墙/CORS 拦截）';
     else if(/401|403|402/.test(em)) em = '接口鉴权失败（' + em + '）';
     body.innerHTML = '<b style="color:#b03a2e">❌ 直连失败</b>：' + em +
-      '<br><span style="font-size:12px;color:#8a7a5c">请检查：1) 当前网络能否访问外网；2) 稍等几秒后点上方「重试」；3) 仍不行可尝试切换 Wi-Fi/流量。</span>';
+      '<br><span style="font-size:12px;color:#8a7a5c">可稍后点「重试在线解读」；若长期不稳定，可点「🔑 备用通道」填入自己的 API Key 继续使用。</span>';
   }
 }
 
